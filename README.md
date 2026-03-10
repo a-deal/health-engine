@@ -30,6 +30,28 @@ The scoring engine and insight rules are the foundation. The interesting directi
 
 **Voice-first check-ins.** Pair with a speech-to-text layer (Whisper, Superwhisper, or system dictation) and your morning check-in becomes a conversation — talk to your health coach, get a read on your numbers, hear what to focus on today. The coaching voice is written to sound natural spoken aloud.
 
+## Example: Morning Check-in
+
+Open the project with Claude Code and say *"how am I doing?"* Here's what a real check-in looks like — Claude pulls the briefing behind the scenes and coaches from your actual numbers:
+
+> **Morning read — March 10**
+>
+> Recovery looks solid. RHR at 50.5 and trending down hard (57 → 50 over 90 days), HRV at 64 and trending up. Your body is adapting well to the cut — cardiovascular fitness is improving even in a deficit. Zone 2 at 164 min/week is doing its job.
+>
+> The weight picture is honest: 194.6 this morning, 6.6 lbs from target. The weekly rate calculated to 0.1 lbs — basically flat over the last week. That could be a stall, water retention, or just noise. Your 7-day rolling average is 194.6 which is down from where you were, so the trend is still headed the right direction. Worth watching this week to see if it breaks.
+>
+> Sleep is still your weakest link. 6.5 hrs average, ±107 min bedtime variance. That regularity number is roughly 10th percentile — it's the one metric dragging your whole picture down. You built a sleep habits checklist but the data shows almost none of them are sticking yet. The AM sunlight streak of 3 days is the only one with momentum.
+>
+> You've had 54g protein so far today. 136g to go. You need a big protein-forward meal this afternoon and evening.
+>
+> **Two things for today:**
+> 1. Log tonight's habits honestly. Pick two from your sleep list and do them.
+> 2. Hit 150g protein minimum. A double steak bowl gets you 55g in one shot.
+
+No scripts to run. No dashboard to check. You talk, it reads your data, it coaches. The `CLAUDE.md` playbook teaches any LLM to do this — pull the structured briefing, interpret the scores and trends, and give forward guidance grounded in real numbers.
+
+Under the hood, `python3 cli.py briefing` produces a single JSON snapshot with everything: scores, insights, weight trend, nutrition remaining, strength progression, habit streaks, and compound coaching signals. The LLM never invents data — it reads what the engine computed.
+
 ## Get Started (2 minutes)
 
 ### Option A: Interactive setup
