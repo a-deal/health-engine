@@ -92,6 +92,40 @@ def build_briefing(config: dict) -> dict:
     if weights_for_score:
         profile.weight_lbs = weights_for_score[-1]["weight"]
 
+    # Incorporate lab results into profile for scoring
+    labs = _load_lab_results(data_dir)
+    briefing["data_available"]["lab_results"] = labs is not None
+    if labs:
+        latest = labs.get("latest", {})
+        lab_field_map = {
+            "ldl_c": "ldl_c",
+            "hdl_c": "hdl_c",
+            "total_cholesterol": "total_cholesterol",
+            "triglycerides": "triglycerides",
+            "apob": "apob",
+            "fasting_glucose": "fasting_glucose",
+            "hba1c": "hba1c",
+            "fasting_insulin": "fasting_insulin",
+            "hscrp": "hscrp",
+            "ast": "ast",
+            "alt": "alt",
+            "ggt": "ggt",
+            "tsh": "tsh",
+            "ferritin": "ferritin",
+            "hemoglobin": "hemoglobin",
+            "wbc": "wbc",
+            "platelets": "platelets",
+            "lpa": "lpa",
+        }
+        for lab_key, profile_attr in lab_field_map.items():
+            val = latest.get(lab_key)
+            if val is not None:
+                setattr(profile, profile_attr, val)
+        briefing["labs"] = {
+            "last_draw": labs.get("draws", [{}])[0].get("date") if labs.get("draws") else None,
+            "markers_available": len(latest),
+        }
+
     score_output = score_profile(profile)
     briefing["score"] = {
         "coverage": score_output["coverage_score"],
@@ -283,6 +317,14 @@ def build_briefing(config: dict) -> dict:
 # --- Data loading helpers ---
 
 def _load_json(path: Path) -> Optional[dict]:
+    if not path.exists():
+        return None
+    with open(path) as f:
+        return json.load(f)
+
+
+def _load_lab_results(data_dir: Path) -> Optional[dict]:
+    path = data_dir / "lab_results.json"
     if not path.exists():
         return None
     with open(path) as f:
