@@ -33,7 +33,7 @@ The scoring engine and insight rules are the foundation. The interesting directi
 ### Option A: Interactive setup
 
 ```bash
-git clone https://github.com/andrewdeal/health-engine.git
+git clone https://github.com/a-deal/health-engine.git
 cd health-engine
 ./setup.sh
 ```
@@ -43,7 +43,7 @@ Walks you through everything: dependencies, config, Garmin connection, verificat
 ### Option B: Use with Claude Code
 
 ```bash
-git clone https://github.com/andrewdeal/health-engine.git
+git clone https://github.com/a-deal/health-engine.git
 cd health-engine
 claude
 ```
@@ -55,7 +55,7 @@ Works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or Clau
 ### Option C: Manual
 
 ```bash
-git clone https://github.com/andrewdeal/health-engine.git
+git clone https://github.com/a-deal/health-engine.git
 cd health-engine
 python3 -m pip install -e .          # core
 python3 -m pip install -e ".[garmin]" # + Garmin integration
