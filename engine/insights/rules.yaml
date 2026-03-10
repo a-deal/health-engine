@@ -1,0 +1,31 @@
+# Health insight thresholds — customize these for your needs
+# All values are configurable; the engine uses these as defaults.
+
+hrv:
+  critical_low: 50        # ms — recovery warning, hard stop
+  warning_low: 55         # ms — approaching warning zone
+  healthy_high: 65        # ms — solid parasympathetic tone
+  trend_threshold: 3      # ms — delta to flag as trending up/down
+
+rhr:
+  elevated: 55            # bpm — systemic stress during deficit
+  excellent: 50           # bpm — strong cardiovascular fitness
+  trend_threshold: 2      # bpm — delta to flag as trending
+
+sleep:
+  duration_target: 7.0    # hours — minimum target
+  regularity_high: 60     # min stdev — irregular bedtime warning
+  regularity_target: 45   # min stdev — aim below this
+
+zone2:
+  target_min_per_week: 150  # minutes — AHA recommendation
+  low_threshold: 90         # minutes — flag if below
+
+weight:
+  fast_loss_threshold: 2.0  # lbs/week — too aggressive if combined with low HRV
+
+bp:
+  systolic_optimal: 120
+  diastolic_optimal: 80
+  systolic_elevated: 130
+  diastolic_elevated: 80

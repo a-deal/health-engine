@@ -1,0 +1,30 @@
+config.yaml
+data/
+*.csv
+
+# Ignore JSON data files in root and data/, but keep engine data + test fixtures
+*.json
+!engine/data/*.json
+!tests/fixtures/*.json
+!config.example.yaml
+!package.json
+# Need to un-ignore the engine/data directory first
+!engine/data/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.venv/
+
+# Garmin tokens
+.garmin_tokens/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store

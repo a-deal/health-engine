@@ -1,0 +1,33 @@
+# Copy to config.yaml and fill in your values
+profile:
+  age: 35
+  sex: M  # M or F
+
+targets:
+  weight_lbs: 185
+  protein_g: 190
+  calories_training: 2400
+  calories_rest: 2100
+
+garmin:
+  email: ""        # your Garmin Connect email
+  password: ""     # your Garmin Connect password (or use GARMIN_EMAIL / GARMIN_PASSWORD env vars)
+  token_dir: ~/.config/health-engine/garmin-tokens
+
+data_dir: ./data   # where your CSVs live (gitignored)
+
+exercise_name_map:
+  barbell deadlift: deadlift
+  sumo deadlift: deadlift
+  deadlift: deadlift
+  barbell bench press: bench_press
+  dumbbell bench press: bench_press
+  bench press: bench_press
+  barbell back squat: squat
+  back squat: squat
+  belt squat: squat
+  squat: squat
+  barbell squat: squat
+
+insights:
+  thresholds_file: engine/insights/rules.yaml  # customize thresholds
