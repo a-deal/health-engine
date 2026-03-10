@@ -80,6 +80,18 @@ def build_briefing(config: dict) -> dict:
         profile.hrv_rmssd_avg = garmin.get("hrv_rmssd_avg")
         profile.zone2_min_per_week = garmin.get("zone2_min_per_week")
 
+    # Incorporate latest BP reading into profile for scoring
+    bp_data_for_score = _load_bp_log(data_dir)
+    if bp_data_for_score and len(bp_data_for_score) > 0:
+        latest_bp = bp_data_for_score[-1]
+        profile.systolic = latest_bp["sys"]
+        profile.diastolic = latest_bp["dia"]
+
+    # Incorporate latest weight into profile
+    weights_for_score = _load_weight_log(data_dir)
+    if weights_for_score:
+        profile.weight_lbs = weights_for_score[-1]["weight"]
+
     score_output = score_profile(profile)
     briefing["score"] = {
         "coverage": score_output["coverage_score"],
@@ -186,18 +198,37 @@ def build_briefing(config: dict) -> dict:
 
     if habit_data:
         habits_section = {}
-        habit_names = set(h["habit"] for h in habit_data)
-        for habit_name in sorted(habit_names):
-            completed_dates = [
-                h["date"] for h in habit_data
-                if h["habit"] == habit_name and h.get("completed", "").lower() in ("yes", "true", "1")
-            ]
-            ga = gap_analysis(completed_dates, window_days=30, as_of=today)
-            habits_section[habit_name] = {
-                "current_streak": ga["current_streak"],
-                "completion_rate": ga["completion_rate"],
-                "longest_streak": ga["longest_streak"],
-            }
+        # Detect format: wide (one col per habit) vs long (habit + completed cols)
+        sample = habit_data[0]
+        if "habit" in sample and "completed" in sample:
+            # Long format: date, habit, completed
+            habit_names = set(h["habit"] for h in habit_data)
+            for habit_name in sorted(habit_names):
+                completed_dates = [
+                    h["date"] for h in habit_data
+                    if h["habit"] == habit_name and h.get("completed", "").lower() in ("yes", "true", "1", "y")
+                ]
+                ga = gap_analysis(completed_dates, window_days=30, as_of=today)
+                habits_section[habit_name] = {
+                    "current_streak": ga["current_streak"],
+                    "completion_rate": ga["completion_rate"],
+                    "longest_streak": ga["longest_streak"],
+                }
+        else:
+            # Wide format: date, habit1, habit2, ... (values: y/n/yes/no)
+            skip_cols = {"date", "notes"}
+            habit_names = [k for k in sample.keys() if k.lower() not in skip_cols]
+            for habit_name in habit_names:
+                completed_dates = [
+                    h["date"] for h in habit_data
+                    if h.get(habit_name, "").lower() in ("yes", "true", "1", "y")
+                ]
+                ga = gap_analysis(completed_dates, window_days=30, as_of=today)
+                habits_section[habit_name] = {
+                    "current_streak": ga["current_streak"],
+                    "completion_rate": ga["completion_rate"],
+                    "longest_streak": ga["longest_streak"],
+                }
         if habits_section:
             briefing["habits"] = habits_section
 
