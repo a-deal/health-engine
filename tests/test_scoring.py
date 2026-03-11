@@ -61,7 +61,12 @@ def test_score_empty_profile():
 
 
 def test_score_full_profile():
-    """Scoring a fully populated profile should return 100% coverage."""
+    """Scoring a fully populated profile should return high coverage.
+
+    Note: coverage may be <100% due to reliability multipliers on single
+    readings (BP 0.5, fasting insulin 0.7, hs-CRP 0.6). With protocol-level
+    data (7-day BP avg, multiple draws), coverage would be 100%.
+    """
     with open(FIXTURES / "sample_profile.json") as f:
         data = json.load(f)
     demo_data = data.pop("demographics")
@@ -70,9 +75,14 @@ def test_score_full_profile():
         **{k: v for k, v in data.items() if hasattr(UserProfile, k)},
     )
     output = score_profile(profile)
-    assert output["coverage_score"] == 100
+    assert output["coverage_score"] >= 85  # All metrics present, some with reliability < 1.0
     assert output["avg_percentile"] is not None
     assert len(output["gaps"]) == 0
+
+    # With multi-reading counts, coverage reaches 100%
+    counts = {"bp": 7, "hscrp": 2, "fasting_insulin": 2}
+    output_full = score_profile(profile, metric_counts=counts)
+    assert output_full["coverage_score"] == 100
 
 
 def test_score_partial_profile():

@@ -98,9 +98,24 @@ Config: `config.yaml` (gitignored). Data: `data/` (gitignored). Thresholds: `eng
 - Use `python3` not `python`
 - Run tests after code changes: `python3 -m pytest tests/ -v`
 
+## Explaining the Methodology
+
+When a user asks "why do you measure this?" or "how does scoring work?", reference `docs/METHODOLOGY.md` — it explains the reasoning behind every scoring decision in plain language. Key points to convey:
+
+- **Clinical zones** (Optimal/Healthy/Borderline/Elevated) are the primary signal, sourced from AHA, ADA, ESC, etc. They answer "am I healthy?"
+- **Population percentiles** are secondary context. The 50th percentile = median American (42% obese, 38% prediabetic). Better than average ≠ healthy.
+- **Freshness** — old data counts less. A lipid panel from 18 months ago is at ~33% credit. This is honest, not punitive.
+- **Reliability** — single readings of noisy metrics (hs-CRP, BP, fasting insulin) count less than averaged readings.
+- **Cross-metric patterns** — metabolic syndrome, insulin resistance, atherogenic dyslipidemia, recovery stress. The compound signal is often more important than any individual metric.
+- **Why ApoB > LDL-C** — counts atherogenic particles, not just cholesterol mass. LDL-C misses small dense LDL.
+- **Why fasting insulin first** — catches insulin resistance 10-15 years before glucose moves.
+
+Don't lecture. Share one insight at a time when it's relevant to what the user is asking about.
+
 ## Docs
 
-- `docs/SCORING.md` — How the scoring engine works
+- `docs/METHODOLOGY.md` — **Full methodology reference** — why we score each metric, evidence sources, clinical thresholds
+- `docs/SCORING.md` — How the scoring engine works (coverage, assessment, weights)
 - `docs/METRICS.md` — 20-metric catalog with evidence
 - `docs/DATA_FORMATS.md` — CSV/JSON schemas
 - `docs/ONBOARDING.md` — Setup walkthrough

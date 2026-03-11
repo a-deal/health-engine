@@ -15,6 +15,7 @@ from engine.models import Demographics, UserProfile
 from engine.scoring.engine import score_profile
 from engine.insights.engine import generate_insights, load_rules
 from engine.insights.coaching import assess_sleep_debt, assess_deficit_impact, assess_taper_readiness
+from engine.insights.patterns import detect_patterns
 from engine.tracking.weight import rolling_average, weekly_rate, projected_date, rate_assessment
 from engine.tracking.nutrition import remaining_to_hit, daily_totals, protein_check
 from engine.tracking.strength import est_1rm, progression_summary
@@ -126,7 +127,33 @@ def build_briefing(config: dict) -> dict:
             "markers_available": len(latest),
         }
 
-    score_output = score_profile(profile)
+    # Build metric dates and counts for freshness/reliability
+    metric_dates = {}
+    metric_counts = {}
+    if labs:
+        metric_dates.update(_extract_lab_dates(labs))
+        metric_counts.update(_count_lab_readings(labs))
+    if garmin:
+        garmin_date = garmin.get("last_updated", "")[:10]  # ISO date portion
+        if garmin_date:
+            for key in ("resting_hr", "daily_steps_avg", "sleep_regularity_stddev",
+                        "sleep_duration_avg", "vo2_max", "hrv_rmssd_avg", "zone2_min_per_week"):
+                metric_dates[key] = garmin_date
+    if bp_data_for_score:
+        bp_rows_raw = read_csv(data_dir / "bp_log.csv")
+        if bp_rows_raw:
+            metric_dates["bp_single"] = bp_rows_raw[-1].get("date", "")
+            metric_dates["bp_protocol"] = bp_rows_raw[-1].get("date", "")
+            # Count BP readings in last 7 days
+            bp_count = _count_recent_readings(bp_rows_raw, 7)
+            metric_counts["bp"] = bp_count
+    if weights_for_score:
+        weight_rows_raw = read_csv(data_dir / "weight_log.csv")
+        if weight_rows_raw:
+            metric_dates["weight_lbs"] = weight_rows_raw[-1].get("date", "")
+
+    score_output = score_profile(profile, metric_dates=metric_dates,
+                                 metric_counts=metric_counts)
     briefing["score"] = {
         "coverage": score_output["coverage_score"],
         "avg_percentile": score_output["avg_percentile"],
@@ -157,9 +184,13 @@ def build_briefing(config: dict) -> dict:
         trends=trends,
         rules=rules,
     )
+    # Pattern detection — cross-metric interaction signals
+    patterns = detect_patterns(profile, garmin=garmin)
+    all_insights = insights + patterns
+
     briefing["insights"] = [
         {"severity": i.severity, "category": i.category, "title": i.title, "body": i.body}
-        for i in insights
+        for i in all_insights
     ]
 
     # --- Weight ---
@@ -255,7 +286,7 @@ def build_briefing(config: dict) -> dict:
             for habit_name in habit_names:
                 completed_dates = [
                     h["date"] for h in habit_data
-                    if h.get(habit_name, "").lower() in ("yes", "true", "1", "y")
+                    if (h.get(habit_name) or "").lower() in ("yes", "true", "1", "y")
                 ]
                 ga = gap_analysis(completed_dates, window_days=30, as_of=today)
                 habits_section[habit_name] = {
@@ -265,6 +296,32 @@ def build_briefing(config: dict) -> dict:
                 }
         if habits_section:
             briefing["habits"] = habits_section
+
+    # --- Protocols (active focus) ---
+    focus_list = config.get("focus", [])
+    if focus_list and habit_data:
+        from engine.coaching.protocols import load_protocol, protocol_progress
+        protocols_section = []
+        for entry in focus_list:
+            proto_name = entry.get("protocol")
+            started = entry.get("started")
+            if not proto_name or not started:
+                continue
+            proto = load_protocol(proto_name)
+            if not proto:
+                continue
+            progress = protocol_progress(
+                protocol=proto,
+                started=started,
+                habit_data=habit_data,
+                garmin=garmin,
+                as_of=today,
+            )
+            progress["priority"] = entry.get("priority", 99)
+            protocols_section.append(progress)
+        if protocols_section:
+            protocols_section.sort(key=lambda p: p.get("priority", 99))
+            briefing["protocols"] = protocols_section
 
     # --- Coaching signals (compound) ---
     coaching_signals = []
@@ -392,3 +449,45 @@ def _build_trends(garmin_daily) -> Optional[dict]:
     if rhr_pts or hrv_pts:
         return {"rhr_pts": rhr_pts, "hrv_pts": hrv_pts}
     return None
+
+
+def _extract_lab_dates(labs: dict) -> dict:
+    """Extract the most recent draw date for each lab metric from draws array."""
+    dates = {}
+    draws = labs.get("draws", [])
+    for draw in draws:
+        draw_date = draw.get("date", "")
+        if not draw_date:
+            continue
+        results = draw.get("results", {})
+        for key in results:
+            if key not in dates:  # First (most recent) draw wins
+                dates[key] = draw_date
+    return dates
+
+
+def _count_lab_readings(labs: dict) -> dict:
+    """Count how many draws contain each metric."""
+    counts = {}
+    draws = labs.get("draws", [])
+    for draw in draws:
+        results = draw.get("results", {})
+        for key in results:
+            counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _count_recent_readings(rows: list, days: int) -> int:
+    """Count rows within the last N days."""
+    from datetime import timedelta
+    today = datetime.now().date()
+    cutoff = today - timedelta(days=days)
+    count = 0
+    for row in rows:
+        try:
+            row_date = datetime.strptime(row.get("date", ""), "%Y-%m-%d").date()
+            if row_date >= cutoff:
+                count += 1
+        except (ValueError, TypeError):
+            pass
+    return count

@@ -14,6 +14,14 @@ class Standing(Enum):
     UNKNOWN = "No Data"
 
 
+class ClinicalZone(Enum):
+    OPTIMAL = "Optimal"
+    HEALTHY = "Healthy"
+    BORDERLINE = "Borderline"
+    ELEVATED = "Elevated"
+    UNKNOWN = ""
+
+
 @dataclass
 class Demographics:
     age: int
@@ -109,9 +117,15 @@ class MetricResult:
     coverage_weight: float = 1.0
     cost_to_close: str = ""
     note: str = ""
+    clinical_zone: str = ""        # "Optimal" / "Healthy" / "Borderline" / "Elevated" / ""
+    clinical_note: str = ""        # e.g., "ApoB 72 is below the ESC target of <80"
+    observed_date: str = ""        # ISO date of when this metric was measured
+    freshness_fraction: float = 1.0  # 0.0-1.0, decays over time
+    reliability: float = 1.0      # 0.0-1.0, based on CVI and reading count
+    reliability_note: str = ""     # e.g., "Single hs-CRP reading (42% CVI)"
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "name": self.name,
             "tier": self.tier,
             "rank": self.rank,
@@ -124,6 +138,17 @@ class MetricResult:
             "cost_to_close": self.cost_to_close,
             "note": self.note,
         }
+        if self.clinical_zone:
+            d["clinical_zone"] = self.clinical_zone
+            d["clinical_note"] = self.clinical_note
+        if self.observed_date:
+            d["observed_date"] = self.observed_date
+        if self.freshness_fraction < 1.0:
+            d["freshness_fraction"] = round(self.freshness_fraction, 2)
+        if self.reliability < 1.0:
+            d["reliability"] = round(self.reliability, 2)
+            d["reliability_note"] = self.reliability_note
+        return d
 
 
 @dataclass

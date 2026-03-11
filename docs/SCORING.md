@@ -1,23 +1,35 @@
 # How Scoring Works
 
+> For the full reasoning behind every scoring decision, see [METHODOLOGY.md](METHODOLOGY.md).
+
 ## Overview
 
 The health engine scores a user profile across 20 health metrics in 2 tiers:
 
-- **Tier 1: Foundation** (10 metrics, 60% of total weight) — the essentials everyone should track
-- **Tier 2: Enhanced** (10 metrics, 25% of total weight) — deeper health intelligence
+- **Tier 1: Foundation** (10 metrics, ~70% of total weight) — the essentials everyone should track
+- **Tier 2: Enhanced** (10 metrics, ~30% of total weight) — deeper health intelligence
 
-## Two Scores
+## Three Layers of Scoring
 
-### Coverage Score
-"What percentage of high-ROI health data do you have?"
+### 1. Clinical Zones (Primary Signal)
+"Am I healthy?" — each metric assessed against evidence-based clinical thresholds (AHA, ADA, ESC, etc.). Zones: Optimal / Healthy / Borderline / Elevated.
 
-Each metric has a **coverage weight** reflecting its relative importance (evidence strength × actionability). If you have data for a metric, its weight counts toward your coverage score.
+### 2. Population Percentiles (Context)
+"Where do I rank?" — NHANES 2017-2020 percentiles show where you stand vs age/sex peers. The 50th percentile = the median American (who is metabolically suboptimal). Being at the 60th percentile doesn't mean you're healthy — it means you're better than average in a sick population.
+
+### 3. Coverage Score (Completeness)
+"What percentage of high-ROI health data do you have?" — weighted by evidence strength x actionability, adjusted for **freshness** (data age) and **reliability** (measurement quality).
+
+```
+effective_weight = base_weight x freshness_fraction x reliability
+```
+
+A 7-day BP protocol from last week = full credit. A single BP reading from 4 months ago = partial credit. A lipid panel from 20 months ago = near zero credit. This is honest: old data really is less informative.
 
 ### Assessment Score
 "For the data you have, where do you stand vs peers?"
 
-Each metric with actual values is scored against population data, producing a **percentile** (0-100, where higher = better). The assessment score is the average percentile across all assessed metrics.
+Weighted average percentile using **standing weights** — which differ from coverage weights for Lp(a) (genetically fixed, can't act on it, reduced standing impact).
 
 ## Percentile Sources
 
@@ -37,23 +49,23 @@ Each metric with actual values is scored against population data, producing a **
 ## Metric Catalog
 
 ### Tier 1: Foundation (60 pts)
-| # | Metric | Weight | Source |
-|---|--------|--------|--------|
-| 1 | Blood Pressure | 8 | Omron cuff / clinic |
-| 2 | Lipid Panel + ApoB | 8 | Blood draw |
-| 3 | Metabolic Panel | 8 | Blood draw |
-| 4 | Family History | 6 | Self-report |
-| 5 | Sleep Regularity | 5 | Wearable |
-| 6 | Daily Steps | 4 | Phone / wearable |
-| 7 | Resting Heart Rate | 4 | Wearable |
-| 8 | Waist Circumference | 5 | Tape measure |
-| 9 | Medication List | 4 | Self-report |
-| 10 | Lp(a) | 8 | Blood draw (once) |
+| # | Metric | Coverage Wt | Standing Wt | Source |
+|---|--------|-------------|-------------|--------|
+| 1 | Blood Pressure | 8 | 8 | Omron cuff / clinic |
+| 2 | Lipid Panel + ApoB | 8 | 8 | Blood draw |
+| 3 | Metabolic Panel | 8 | 8 | Blood draw |
+| 4 | Family History | 6 | 6 | Self-report |
+| 5 | Sleep Regularity | 6 | 6 | Wearable |
+| 6 | Daily Steps | 4 | 4 | Phone / wearable |
+| 7 | Resting Heart Rate | 4 | 4 | Wearable |
+| 8 | Waist Circumference | 5 | 5 | Tape measure |
+| 9 | Medication List | 3 | 3 | Self-report |
+| 10 | Lp(a) | 8 | **4** | Blood draw (once) |
 
-### Tier 2: Enhanced (25 pts)
+### Tier 2: Enhanced (26 pts)
 | # | Metric | Weight | Source |
 |---|--------|--------|--------|
-| 11 | VO2 Max | 5 | Wearable estimate |
+| 11 | VO2 Max | 6 | Wearable estimate |
 | 12 | HRV (7-day avg) | 2 | Wearable |
 | 13 | hs-CRP | 3 | Blood draw |
 | 14 | Liver Enzymes | 2 | Blood draw |
@@ -63,6 +75,12 @@ Each metric with actual values is scored against population data, producing a **
 | 18 | Weight Trends | 2 | Scale |
 | 19 | PHQ-9 | 2 | Questionnaire |
 | 20 | Zone 2 Cardio | 2 | Wearable |
+
+**Key weight changes:**
+- VO2 Max 5→6: Strongest modifiable mortality predictor (Mandsager, JAMA 2018)
+- Sleep 5→6: Regularity > duration for mortality (Phillips et al.)
+- Medications 4→3: Context, not measurement
+- Lp(a) standing 8→4: Genetically fixed — important to check, but shouldn't permanently penalize
 
 ## Gap Analysis
 

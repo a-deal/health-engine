@@ -255,21 +255,51 @@ HRV_RMSSD = {
 
 
 # Coverage weights — reflects relative ROI
+# These determine how much each metric contributes to the coverage score.
 TIER1_WEIGHTS = {
     "blood_pressure": 8,
     "lipid_apob": 8,
     "metabolic": 8,
     "family_history": 6,
-    "sleep": 5,
+    "sleep": 6,         # Was 5. Phillips et al. — regularity > duration for mortality
     "steps": 4,
     "resting_hr": 4,
     "waist": 5,
-    "medications": 4,
+    "medications": 3,   # Was 4. Information, not measurement. Slight reduction.
     "lpa": 8,
 }
 
+# Standing weights — used for the health standing composite score.
+# Differs from coverage weight for metrics where "having the data" matters
+# more than the ongoing score contribution (e.g., Lp(a) is genetically fixed).
+TIER1_STANDING_WEIGHTS = {
+    "blood_pressure": 8,
+    "lipid_apob": 8,
+    "metabolic": 8,
+    "family_history": 6,
+    "sleep": 6,
+    "steps": 4,
+    "resting_hr": 4,
+    "waist": 5,
+    "medications": 3,
+    "lpa": 4,           # Coverage wt=8 (important to check), standing wt=4 (genetically fixed, can't act on it)
+}
+
 TIER2_WEIGHTS = {
-    "vo2_max": 5,
+    "vo2_max": 6,       # Was 5. Strongest modifiable all-cause mortality predictor (Mandsager, JAMA 2018)
+    "hrv": 2,
+    "hscrp": 3,
+    "liver": 2,
+    "cbc": 2,
+    "thyroid": 2,
+    "vitamin_d_ferritin": 3,
+    "weight_trends": 2,
+    "phq9": 2,
+    "zone2": 2,
+}
+
+TIER2_STANDING_WEIGHTS = {
+    "vo2_max": 6,
     "hrv": 2,
     "hscrp": 3,
     "liver": 2,

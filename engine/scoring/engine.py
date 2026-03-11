@@ -23,6 +23,7 @@ from engine.scoring.tables import (
     LPA, SLEEP_REGULARITY, HSCRP, ALT, GGT, TSH, VITAMIN_D, FERRITIN,
     HEMOGLOBIN, VO2_MAX, HRV_RMSSD,
     TIER1_WEIGHTS, TIER2_WEIGHTS,
+    TIER1_STANDING_WEIGHTS, TIER2_STANDING_WEIGHTS,
 )
 
 # Try to load NHANES continuous percentile lookup
@@ -31,6 +32,9 @@ try:
     NHANES_AVAILABLE = True
 except ImportError:
     NHANES_AVAILABLE = False
+
+from engine.scoring.clinical import clinical_assess
+from engine.scoring.freshness import compute_freshness, reliability_factor
 
 
 def age_bucket(age: int) -> str:
@@ -136,9 +140,48 @@ def assess(value: Optional[float], table: dict, demo: Demographics,
             return Standing.OPTIMAL, 90
 
 
-def score_profile(profile: UserProfile) -> dict:
-    """Score a user profile and return coverage + assessment results."""
+def _apply_clinical(result: MetricResult, clinical_key: str, value, demo: Demographics):
+    """Apply clinical zone assessment to a MetricResult."""
+    if value is not None:
+        zone, note = clinical_assess(clinical_key, float(value), demo.age, demo.sex)
+        result.clinical_zone = zone
+        result.clinical_note = note
+
+
+def _apply_freshness(result: MetricResult, freshness_key: str,
+                     dates: dict, as_of: str = None):
+    """Apply freshness decay to a MetricResult based on observed date."""
+    obs_date = dates.get(freshness_key)
+    if obs_date:
+        result.observed_date = obs_date
+        result.freshness_fraction = compute_freshness(freshness_key, obs_date, as_of)
+
+
+def _apply_reliability(result: MetricResult, reliability_key: str,
+                       counts: dict, is_protocol: bool = False):
+    """Apply reliability multiplier to a MetricResult."""
+    count = counts.get(reliability_key, 1)
+    rel, note = reliability_factor(reliability_key, reading_count=count,
+                                   is_protocol=is_protocol)
+    result.reliability = rel
+    result.reliability_note = note
+
+
+def score_profile(profile: UserProfile, metric_dates: dict = None,
+                  metric_counts: dict = None, as_of: str = None) -> dict:
+    """Score a user profile and return coverage + assessment results.
+
+    Args:
+        profile: UserProfile with health data
+        metric_dates: Optional dict mapping metric keys to ISO date strings
+                      e.g., {"apob": "2026-02-13", "resting_hr": "2026-03-10"}
+        metric_counts: Optional dict mapping metric keys to reading counts
+                       e.g., {"bp": 7, "hscrp": 1}
+        as_of: Reference date for freshness (defaults to today)
+    """
     demo = profile.demographics
+    dates = metric_dates or {}
+    counts = metric_counts or {}
     results = []
 
     # --- Blood Pressure ---
@@ -156,6 +199,10 @@ def score_profile(profile: UserProfile) -> dict:
         cost_to_close="$40 one-time (Omron cuff)",
         note="Each 20 mmHg >115 SBP doubles CVD mortality" if not bp_has_data else "",
     ))
+    _apply_clinical(results[-1], "bp_systolic", profile.systolic, demo)
+    bp_key = "bp_protocol" if counts.get("bp", 1) >= 7 else "bp_single"
+    _apply_freshness(results[-1], bp_key, dates, as_of)
+    _apply_reliability(results[-1], "bp", counts, is_protocol=counts.get("bp", 1) >= 7)
 
     # --- Lipid Panel + ApoB ---
     lipid_values = [profile.ldl_c, profile.hdl_c, profile.triglycerides]
@@ -183,6 +230,12 @@ def score_profile(profile: UserProfile) -> dict:
         cost_to_close="$30-50/yr (Quest lipid + ApoB add-on)",
         note="ApoB > LDL-C for risk prediction" if not apob_has_data and lipid_has_data else "",
     ))
+    if apob_has_data:
+        _apply_clinical(results[-1], "apob", profile.apob, demo)
+        _apply_freshness(results[-1], "apob", dates, as_of)
+    elif profile.ldl_c is not None:
+        _apply_clinical(results[-1], "ldl_c", profile.ldl_c, demo)
+        _apply_freshness(results[-1], "ldl_c", dates, as_of)
 
     # --- Metabolic Panel ---
     met_values = [profile.fasting_glucose, profile.hba1c, profile.fasting_insulin]
@@ -212,6 +265,16 @@ def score_profile(profile: UserProfile) -> dict:
         cost_to_close="$40-60/yr (glucose + HbA1c + insulin)",
         note="Fasting insulin catches IR 10-15 yrs before diagnosis" if profile.fasting_insulin is None and met_has_data else "",
     ))
+    if profile.fasting_insulin is not None:
+        _apply_clinical(results[-1], "fasting_insulin", profile.fasting_insulin, demo)
+        _apply_freshness(results[-1], "fasting_insulin", dates, as_of)
+        _apply_reliability(results[-1], "fasting_insulin", counts)
+    elif profile.hba1c is not None:
+        _apply_clinical(results[-1], "hba1c", profile.hba1c, demo)
+        _apply_freshness(results[-1], "hba1c", dates, as_of)
+    elif profile.fasting_glucose is not None:
+        _apply_clinical(results[-1], "fasting_glucose", profile.fasting_glucose, demo)
+        _apply_freshness(results[-1], "fasting_glucose", dates, as_of)
 
     # --- Family History ---
     fh_has_data = profile.has_family_history is not None
@@ -240,6 +303,7 @@ def score_profile(profile: UserProfile) -> dict:
         cost_to_close="Free with any wearable",
         note="Regularity predicts mortality > duration" if not sleep_has_data else "",
     ))
+    _apply_freshness(results[-1], "sleep_regularity_stddev", dates, as_of)
 
     # --- Daily Steps ---
     steps_has_data = profile.daily_steps_avg is not None
@@ -256,6 +320,7 @@ def score_profile(profile: UserProfile) -> dict:
         cost_to_close="Free with phone",
         note="Each +1K steps = ~15% lower mortality" if not steps_has_data else "",
     ))
+    _apply_freshness(results[-1], "daily_steps_avg", dates, as_of)
 
     # --- Resting Heart Rate ---
     rhr_has_data = profile.resting_hr is not None
@@ -271,6 +336,8 @@ def score_profile(profile: UserProfile) -> dict:
         coverage_weight=TIER1_WEIGHTS["resting_hr"],
         cost_to_close="Free with wearable",
     ))
+    _apply_clinical(results[-1], "rhr", profile.resting_hr, demo)
+    _apply_freshness(results[-1], "resting_hr", dates, as_of)
 
     # --- Waist Circumference ---
     waist_has_data = profile.waist_circumference is not None
@@ -286,6 +353,8 @@ def score_profile(profile: UserProfile) -> dict:
         coverage_weight=TIER1_WEIGHTS["waist"],
         cost_to_close="$3 tape measure",
     ))
+    _apply_clinical(results[-1], "waist", profile.waist_circumference, demo)
+    _apply_freshness(results[-1], "waist", dates, as_of)
 
     # --- Medication List ---
     meds_has_data = profile.has_medication_list is not None
@@ -314,6 +383,8 @@ def score_profile(profile: UserProfile) -> dict:
         cost_to_close="$30 — once in your lifetime",
         note="20% of people have elevated Lp(a), invisible on standard panels" if not lpa_has_data else "",
     ))
+    _apply_clinical(results[-1], "lpa", profile.lpa, demo)
+    _apply_freshness(results[-1], "lpa", dates, as_of)
 
     # --- Tier 2: VO2 Max ---
     vo2_has = profile.vo2_max is not None
@@ -330,6 +401,8 @@ def score_profile(profile: UserProfile) -> dict:
         cost_to_close="Free with Garmin/Apple Watch (estimate)",
         note="Strongest modifiable predictor of all-cause mortality" if not vo2_has else "",
     ))
+    _apply_clinical(results[-1], "vo2_max", profile.vo2_max, demo)
+    _apply_freshness(results[-1], "vo2_max", dates, as_of)
 
     # --- Tier 2: HRV ---
     hrv_has = profile.hrv_rmssd_avg is not None
@@ -346,6 +419,7 @@ def score_profile(profile: UserProfile) -> dict:
         cost_to_close="Free with wearable",
         note="Use 7-day rolling avg, not single readings" if not hrv_has else "",
     ))
+    _apply_freshness(results[-1], "hrv_rmssd_avg", dates, as_of)
 
     # --- Tier 2: hs-CRP ---
     crp_has = profile.hscrp is not None
@@ -362,6 +436,9 @@ def score_profile(profile: UserProfile) -> dict:
         cost_to_close="$20/year (add to lab order)",
         note="Adds CVD risk stratification beyond lipids" if not crp_has else "",
     ))
+    _apply_clinical(results[-1], "hscrp", profile.hscrp, demo)
+    _apply_freshness(results[-1], "hscrp", dates, as_of)
+    _apply_reliability(results[-1], "hscrp", counts)
 
     # --- Tier 2: Liver Enzymes ---
     liver_values = [profile.alt, profile.ggt]
@@ -387,6 +464,12 @@ def score_profile(profile: UserProfile) -> dict:
         cost_to_close="Usually included in standard panels",
         note="GGT independently predicts CV mortality + diabetes" if not liver_has else "",
     ))
+    if profile.ggt is not None:
+        _apply_clinical(results[-1], "ggt", profile.ggt, demo)
+        _apply_freshness(results[-1], "ggt", dates, as_of)
+    elif profile.alt is not None:
+        _apply_clinical(results[-1], "alt", profile.alt, demo)
+        _apply_freshness(results[-1], "alt", dates, as_of)
 
     # --- Tier 2: CBC ---
     cbc_values = [profile.hemoglobin, profile.wbc, profile.platelets]
@@ -409,6 +492,8 @@ def score_profile(profile: UserProfile) -> dict:
         cost_to_close="Usually included in standard panels",
         note="Safety net screening — RDW predicts all-cause mortality" if not cbc_has else "",
     ))
+    _apply_clinical(results[-1], "hemoglobin", profile.hemoglobin, demo)
+    _apply_freshness(results[-1], "hemoglobin", dates, as_of)
 
     # --- Tier 2: Thyroid ---
     thyroid_has = profile.tsh is not None
@@ -432,6 +517,8 @@ def score_profile(profile: UserProfile) -> dict:
         cost_to_close="$20/year",
         note="12% lifetime prevalence. Highly treatable." if not thyroid_has else "",
     ))
+    _apply_clinical(results[-1], "tsh", profile.tsh, demo)
+    _apply_freshness(results[-1], "tsh", dates, as_of)
 
     # --- Tier 2: Vitamin D + Ferritin ---
     vd_fer_values = [profile.vitamin_d, profile.ferritin]
@@ -457,6 +544,12 @@ def score_profile(profile: UserProfile) -> dict:
         cost_to_close="$40-60 baseline lab add-on",
         note="42% of US adults Vit D deficient. Cheap to fix." if not vd_fer_has else "",
     ))
+    if profile.vitamin_d is not None:
+        _apply_clinical(results[-1], "vitamin_d", profile.vitamin_d, demo)
+        _apply_freshness(results[-1], "vitamin_d", dates, as_of)
+    elif profile.ferritin is not None:
+        _apply_clinical(results[-1], "ferritin", profile.ferritin, demo)
+        _apply_freshness(results[-1], "ferritin", dates, as_of)
 
     # --- Tier 2: Weight Trends ---
     weight_has = profile.weight_lbs is not None
@@ -495,21 +588,55 @@ def score_profile(profile: UserProfile) -> dict:
     ))
 
     # --- Compute scores ---
+    # Apply freshness × reliability to effective coverage weight
     total_weight = sum(TIER1_WEIGHTS.values()) + sum(TIER2_WEIGHTS.values())
-    covered_weight = sum(r.coverage_weight for r in results if r.has_data)
+    covered_weight = sum(
+        r.coverage_weight * r.freshness_fraction * r.reliability
+        for r in results if r.has_data
+    )
     coverage_pct = round(covered_weight / total_weight * 100)
 
     tier1_results = [r for r in results if r.tier == 1]
     tier2_results = [r for r in results if r.tier == 2]
     t1_total = sum(TIER1_WEIGHTS.values())
     t2_total = sum(TIER2_WEIGHTS.values())
-    t1_covered = sum(r.coverage_weight for r in tier1_results if r.has_data)
-    t2_covered = sum(r.coverage_weight for r in tier2_results if r.has_data)
+    t1_covered = sum(
+        r.coverage_weight * r.freshness_fraction * r.reliability
+        for r in tier1_results if r.has_data
+    )
+    t2_covered = sum(
+        r.coverage_weight * r.freshness_fraction * r.reliability
+        for r in tier2_results if r.has_data
+    )
     t1_pct = round(t1_covered / t1_total * 100)
     t2_pct = round(t2_covered / t2_total * 100)
 
+    # Weighted percentile composite using standing weights
+    # (Lp(a) has reduced standing weight since it's genetically fixed)
+    standing_weight_map = {**TIER1_STANDING_WEIGHTS, **TIER2_STANDING_WEIGHTS}
+    # Map metric names to standing weight keys for lookup
+    _name_to_key = {
+        "Blood Pressure": "blood_pressure", "Lipid Panel + ApoB": "lipid_apob",
+        "Metabolic Panel": "metabolic", "Family History": "family_history",
+        "Sleep Regularity": "sleep", "Daily Steps": "steps",
+        "Resting Heart Rate": "resting_hr", "Waist Circumference": "waist",
+        "Medication List": "medications", "Lp(a)": "lpa",
+        "VO2 Max": "vo2_max", "HRV (7-day avg)": "hrv",
+        "hs-CRP": "hscrp", "Liver Enzymes": "liver", "CBC": "cbc",
+        "Thyroid (TSH)": "thyroid", "Vitamin D + Ferritin": "vitamin_d_ferritin",
+        "Weight Trends": "weight_trends", "PHQ-9 (Depression)": "phq9",
+        "Zone 2 Cardio": "zone2",
+    }
     assessed = [r for r in results if r.percentile_approx is not None]
-    avg_percentile = round(sum(r.percentile_approx for r in assessed) / len(assessed)) if assessed else None
+    if assessed:
+        total_sw = sum(standing_weight_map.get(_name_to_key.get(r.name, ""), 1) for r in assessed)
+        weighted_pct = sum(
+            r.percentile_approx * standing_weight_map.get(_name_to_key.get(r.name, ""), 1)
+            for r in assessed
+        )
+        avg_percentile = round(weighted_pct / total_sw) if total_sw > 0 else None
+    else:
+        avg_percentile = None
 
     gaps = [r for r in results if not r.has_data]
     gaps_sorted = sorted(gaps, key=lambda r: r.coverage_weight, reverse=True)
