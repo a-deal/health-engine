@@ -15,6 +15,31 @@ from typing import Optional
 from engine.models import Insight, UserProfile
 
 
+def summarize_patterns(profile: UserProfile,
+                       garmin: Optional[dict] = None) -> list[dict]:
+    """
+    Return structured pattern summaries for all 4 compound patterns.
+
+    Each dict: name, detected, criteria_met, criteria_total, metrics, severity.
+    Used by the dashboard to show pattern status even when not triggered.
+    """
+    summaries = []
+
+    # Metabolic syndrome
+    summaries.append(_summarize_metabolic_syndrome(profile))
+
+    # Atherogenic dyslipidemia
+    summaries.append(_summarize_atherogenic_dyslipidemia(profile))
+
+    # Insulin resistance
+    summaries.append(_summarize_insulin_resistance(profile))
+
+    # Recovery stress
+    summaries.append(_summarize_recovery_stress(profile, garmin))
+
+    return summaries
+
+
 def detect_patterns(profile: UserProfile,
                     garmin: Optional[dict] = None) -> list[Insight]:
     """
@@ -206,3 +231,149 @@ def _detect_recovery_stress(profile: UserProfile,
             ),
         )
     return None
+
+
+# --- Structured pattern summaries for dashboard ---
+
+def _summarize_metabolic_syndrome(profile: UserProfile) -> dict:
+    criteria_met = 0
+    metrics = []
+    sex = profile.demographics.sex
+
+    if profile.triglycerides is not None and profile.triglycerides >= 150:
+        criteria_met += 1
+        metrics.append(f"TG {profile.triglycerides}")
+    if profile.hdl_c is not None:
+        threshold = 40 if sex == "M" else 50
+        if profile.hdl_c < threshold:
+            criteria_met += 1
+            metrics.append(f"HDL {profile.hdl_c}")
+    if profile.fasting_glucose is not None and profile.fasting_glucose >= 100:
+        criteria_met += 1
+        metrics.append(f"glucose {profile.fasting_glucose}")
+    if profile.waist_circumference is not None:
+        threshold = 40 if sex == "M" else 35
+        if profile.waist_circumference > threshold:
+            criteria_met += 1
+            metrics.append(f"waist {profile.waist_circumference}\"")
+    if profile.systolic is not None and profile.diastolic is not None:
+        if profile.systolic >= 130 or profile.diastolic >= 85:
+            criteria_met += 1
+            metrics.append(f"BP {profile.systolic}/{profile.diastolic}")
+
+    detected = criteria_met >= 3
+    return {
+        "name": "Metabolic Syndrome",
+        "detected": detected,
+        "criteria_met": criteria_met,
+        "criteria_total": 5,
+        "metrics": metrics,
+        "severity": "critical" if detected else "none",
+    }
+
+
+def _summarize_atherogenic_dyslipidemia(profile: UserProfile) -> dict:
+    if profile.triglycerides is None or profile.hdl_c is None or profile.hdl_c <= 0:
+        return {
+            "name": "Atherogenic Dyslipidemia",
+            "detected": False,
+            "criteria_met": 0,
+            "criteria_total": 2,
+            "metrics": [],
+            "severity": "none",
+        }
+
+    ratio = profile.triglycerides / profile.hdl_c
+    criteria_met = 0
+    metrics = []
+    if ratio > 3.5:
+        criteria_met += 1
+        metrics.append(f"TG/HDL {ratio:.1f}")
+    if profile.triglycerides >= 130:
+        criteria_met += 1
+        metrics.append(f"TG {profile.triglycerides}")
+
+    detected = criteria_met == 2
+    return {
+        "name": "Atherogenic Dyslipidemia",
+        "detected": detected,
+        "criteria_met": criteria_met,
+        "criteria_total": 2,
+        "metrics": metrics,
+        "severity": "warning" if detected else "none",
+    }
+
+
+def _summarize_insulin_resistance(profile: UserProfile) -> dict:
+    if profile.fasting_insulin is None:
+        return {
+            "name": "Insulin Resistance",
+            "detected": False,
+            "criteria_met": 0,
+            "criteria_total": 2,
+            "metrics": [],
+            "severity": "none",
+        }
+
+    criteria_met = 0
+    metrics = []
+    glucose_normal = (profile.fasting_glucose is not None and profile.fasting_glucose < 100)
+    insulin_elevated = profile.fasting_insulin > 12
+
+    if insulin_elevated:
+        criteria_met += 1
+        metrics.append(f"insulin {profile.fasting_insulin}")
+    if glucose_normal and insulin_elevated:
+        criteria_met += 1
+        metrics.append(f"glucose {profile.fasting_glucose} (masking)")
+
+    detected = insulin_elevated and glucose_normal
+    return {
+        "name": "Insulin Resistance",
+        "detected": detected,
+        "criteria_met": criteria_met,
+        "criteria_total": 2,
+        "metrics": metrics,
+        "severity": "warning" if detected else "none",
+    }
+
+
+def _summarize_recovery_stress(profile: UserProfile,
+                                garmin: Optional[dict] = None) -> dict:
+    g = garmin or {}
+    hrv = g.get("hrv_rmssd_avg") or (profile.hrv_rmssd_avg if profile.hrv_rmssd_avg else None)
+    rhr = g.get("resting_hr") or (profile.resting_hr if profile.resting_hr else None)
+    sleep = g.get("sleep_duration_avg") or (profile.sleep_duration_avg if profile.sleep_duration_avg else None)
+
+    if hrv is None or rhr is None or sleep is None:
+        return {
+            "name": "Recovery Stress",
+            "detected": False,
+            "criteria_met": 0,
+            "criteria_total": 3,
+            "metrics": [],
+            "severity": "none",
+        }
+
+    criteria_met = 0
+    metrics = []
+    if hrv < 55:
+        criteria_met += 1
+        metrics.append(f"HRV {hrv:.0f}ms")
+    if rhr > 58:
+        criteria_met += 1
+        metrics.append(f"RHR {rhr:.0f}bpm")
+    if sleep < 6.5:
+        criteria_met += 1
+        metrics.append(f"sleep {sleep:.1f}hrs")
+
+    detected = criteria_met >= 2
+    severity = "critical" if criteria_met == 3 else ("warning" if detected else "none")
+    return {
+        "name": "Recovery Stress",
+        "detected": detected,
+        "criteria_met": criteria_met,
+        "criteria_total": 3,
+        "metrics": metrics,
+        "severity": severity,
+    }

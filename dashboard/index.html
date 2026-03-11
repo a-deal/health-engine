@@ -1,0 +1,1670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Health Engine — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #08080a;
+  --bg-elevated: #0e0e12;
+  --bg-card: #111116;
+  --bg-hover: #161620;
+  --border: #1e1e28;
+  --border-subtle: #16161e;
+  --text: #f2f2f2;
+  --text-muted: #c0c0cc;
+  --text-dim: #606070;
+  --red: #c83c3c;
+  --red-dim: rgba(200, 60, 60, 0.08);
+  --red-glow: rgba(200, 60, 60, 0.20);
+  --green: #2d8a4e;
+  --green-dim: rgba(45, 138, 78, 0.08);
+  --green-bright: #3daa62;
+  --green-glow: rgba(45, 138, 78, 0.18);
+  --amber: #e8a020;
+  --amber-dim: rgba(232, 160, 32, 0.08);
+  --amber-glow: rgba(232, 160, 32, 0.18);
+  --blue: #4488ee;
+  --blue-dim: rgba(68, 136, 238, 0.06);
+  --purple: #8b7cf6;
+  --purple-dim: rgba(139, 124, 246, 0.08);
+  --font-display: 'Barlow Condensed', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+/* ── Sticky Header ── */
+.sticky-nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(8, 8, 10, 0.9);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.sticky-nav-inner {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 14px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nav-title {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.nav-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.nav-date {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.freshness-pill {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  padding: 3px 10px;
+  border-radius: 100px;
+  letter-spacing: 0.02em;
+}
+
+.freshness-fresh { color: var(--green-bright); background: var(--green-dim); }
+.freshness-stale { color: var(--amber); background: var(--amber-dim); }
+.freshness-old { color: var(--red); background: var(--red-dim); }
+
+/* ── Container ── */
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 28px;
+}
+
+/* ── Hero: Frosted, center-aligned ── */
+.hero {
+  padding: 40px 0 48px;
+}
+
+.hero-card {
+  position: relative;
+  background: rgba(14, 14, 18, 0.6);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  padding: 48px 44px 44px;
+  text-align: center;
+  overflow: hidden;
+}
+
+.hero-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: radial-gradient(ellipse 60% 60% at 50% 20%, rgba(45, 138, 78, 0.05) 0%, transparent 70%),
+              radial-gradient(ellipse 40% 50% at 30% 80%, rgba(139, 124, 246, 0.03) 0%, transparent 70%),
+              radial-gradient(ellipse 40% 50% at 70% 80%, rgba(68, 136, 238, 0.02) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.coverage-ring-wrap {
+  position: relative;
+  width: 130px;
+  height: 130px;
+  margin: 0 auto 28px;
+}
+
+.coverage-ring-wrap svg { width: 100%; height: 100%; }
+
+.ring-bg { fill: none; stroke: rgba(255,255,255,0.04); stroke-width: 5; }
+.ring-track { fill: none; stroke-width: 5; stroke-linecap: round; transition: stroke-dasharray 1.2s ease 0.2s; }
+
+.ring-glow {
+  fill: none;
+  stroke-width: 10;
+  stroke-linecap: round;
+  opacity: 0.18;
+  filter: blur(4px);
+  transition: stroke-dasharray 1.2s ease 0.2s;
+}
+
+.ring-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.ring-pct-big {
+  font-family: var(--font-mono);
+  font-size: 1.8rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -1px;
+}
+
+.ring-pct-unit {
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.ring-label {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 4px;
+}
+
+.assessment-stats {
+  display: flex;
+  justify-content: center;
+  gap: 48px;
+  position: relative;
+}
+
+.stat-block { display: flex; flex-direction: column; align-items: center; }
+
+.stat-value {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.stat-label {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 5px;
+}
+
+/* Flywheel tagline */
+.hero-flywheel {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.flywheel-step {
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.flywheel-arrow {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-dim);
+}
+
+/* ── Next Moves ── */
+.moves-section {
+  padding: 0 0 44px;
+}
+
+.section-label {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+
+.moves-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.move-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: transform 0.15s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.move-card:hover {
+  transform: translateY(-1px);
+  border-color: #222230;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+.move-metric {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.move-action {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.move-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.move-cost {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.move-impact {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--green-bright);
+  background: var(--green-dim);
+  padding: 2px 7px;
+  border-radius: 3px;
+}
+
+/* ── Section Group Headers ── */
+.section-group-header {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text);
+  padding: 56px 0 8px;
+  margin-top: 0;
+}
+
+/* ── Collapsible Sections ── */
+.collapsible {
+}
+
+.collapsible-trigger {
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-align: left;
+}
+
+.trigger-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.trigger-badge {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.trigger-badge.has-critical {
+  color: var(--red);
+  background: var(--red-dim);
+  border-color: transparent;
+  box-shadow: 0 0 8px var(--red-glow);
+}
+
+.trigger-badge.has-warning {
+  color: var(--amber);
+  background: var(--amber-dim);
+  border-color: transparent;
+  box-shadow: 0 0 8px var(--amber-glow);
+}
+
+.trigger-badge.has-positive {
+  color: var(--green-bright);
+  background: var(--green-dim);
+  border-color: transparent;
+  box-shadow: 0 0 8px var(--green-glow);
+}
+
+.chevron {
+  width: 14px;
+  height: 14px;
+  color: var(--text-dim);
+  transition: transform 0.25s ease;
+  flex-shrink: 0;
+}
+
+.collapsible.open .chevron { transform: rotate(180deg); }
+
+.collapsible-content {
+  display: none;
+  padding-bottom: 24px;
+}
+
+.collapsible.open .collapsible-content { display: block; }
+
+/* ── Coach Read (inside Insights) ── */
+.coach-read {
+  font-size: 0.9rem;
+  color: var(--text);
+  line-height: 1.7;
+  font-style: italic;
+  padding: 16px 20px;
+  background: var(--bg-card);
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+
+.coach-read strong { color: #fff; font-style: normal; }
+
+/* ── Insights ── */
+.insights-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.insight-card {
+  background: var(--bg-card);
+  border-radius: 6px;
+  padding: 14px 18px;
+  border-left: 3px solid var(--text-dim);
+  transition: transform 0.15s;
+}
+
+.insight-card:hover { transform: translateX(2px); }
+
+.insight-card.severity-critical {
+  border-left-color: var(--red);
+  box-shadow: inset 0 0 20px var(--red-dim);
+}
+.insight-card.severity-warning {
+  border-left-color: var(--amber);
+  box-shadow: inset 0 0 20px var(--amber-dim);
+}
+.insight-card.severity-positive {
+  border-left-color: var(--green-bright);
+  box-shadow: inset 0 0 20px var(--green-dim);
+}
+
+.insight-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.insight-title {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.insight-badge {
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.badge-critical { color: var(--red); background: var(--red-dim); }
+.badge-warning { color: var(--amber); background: var(--amber-dim); }
+.badge-positive { color: var(--green-bright); background: var(--green-dim); }
+
+.insight-body {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* ── Compound Patterns ── */
+.patterns-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.pattern-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px 18px;
+  transition: transform 0.15s;
+}
+
+.pattern-card:hover { transform: translateY(-1px); }
+
+.pattern-card.detected {
+  border-color: var(--red);
+  box-shadow: 0 0 12px var(--red-glow);
+}
+
+.pattern-name {
+  font-family: var(--font-display);
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+
+.pattern-status {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.clear { background: var(--green-bright); box-shadow: 0 0 4px var(--green-glow); }
+.status-dot.detected { background: var(--red); box-shadow: 0 0 4px var(--red-glow); }
+
+.pattern-clear { color: var(--green-bright); }
+.pattern-detected { color: var(--red); }
+
+.pattern-criteria {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  opacity: 0.6;
+  margin-top: 6px;
+}
+
+.pattern-metrics {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+.no-patterns {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  padding: 8px 0;
+}
+
+.no-patterns strong { color: var(--green-bright); }
+
+/* ── Health Status: Metric Rows (clean, no left bars) ── */
+.tier-header {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  padding: 12px 0;
+  margin-top: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tier-header .tier-chevron {
+  width: 11px;
+  height: 11px;
+  color: var(--text-dim);
+  transition: transform 0.2s ease;
+}
+
+.tier-header.collapsed .tier-chevron { transform: rotate(-90deg); }
+
+.metrics-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.metric-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 0;
+}
+.metric-row.unmeasured { opacity: 0.55; }
+
+.metric-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.metric-name {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.metric-pct {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.metric-value-col {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-align: right;
+  white-space: nowrap;
+  padding: 0 12px;
+}
+
+.metric-unit-col {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  text-align: left;
+  min-width: 50px;
+  padding-right: 12px;
+}
+
+.zone-pill {
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 100px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.pill-optimal { color: var(--green-bright); background: var(--green-dim); }
+.pill-good { color: #b8b8c8; background: rgba(255,255,255,0.06); }
+.pill-average { color: var(--amber); background: var(--amber-dim); }
+.pill-below { color: #e07830; background: rgba(224, 120, 48, 0.08); }
+.pill-concerning { color: var(--red); background: var(--red-dim); }
+
+.gap-cost {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+/* ── Recovery / Tracking Grid ── */
+.recovery-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.recovery-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px 18px;
+}
+
+.recovery-card.stub {
+  opacity: 0.7;
+  border-style: dashed;
+  border-color: var(--border);
+}
+
+.recovery-label {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rdot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.rdot-blue { background: var(--blue); box-shadow: 0 0 4px rgba(68,136,238,0.3); }
+.rdot-green { background: var(--green-bright); box-shadow: 0 0 4px var(--green-glow); }
+.rdot-amber { background: var(--amber); box-shadow: 0 0 4px var(--amber-glow); }
+.rdot-red { background: var(--red); box-shadow: 0 0 4px var(--red-glow); }
+.rdot-dim { background: var(--text-dim); }
+
+.recovery-value {
+  font-family: var(--font-mono);
+  font-size: 1.4rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.recovery-unit {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.recovery-delta {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  margin-top: 4px;
+}
+
+.delta-good { color: var(--green-bright); }
+.delta-bad { color: var(--red); }
+.delta-neutral { color: var(--text-dim); }
+
+.sparkline-wrap { margin-top: 8px; }
+.sparkline-wrap svg { width: 100%; display: block; }
+
+.sparkline-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2px;
+}
+
+.sparkline-axis span {
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.gauge-track {
+  height: 3px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 2px;
+  margin-top: 10px;
+  overflow: hidden;
+}
+
+.gauge-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.6s ease;
+}
+
+.gauge-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 3px;
+}
+
+.gauge-labels span {
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.gauge-labels .target { color: var(--green-bright); }
+.gauge-labels .concern { color: var(--red); }
+
+.tracking-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.tracking-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px 18px;
+}
+
+.tracking-card.stub {
+  opacity: 0.7;
+  border-style: dashed;
+  border-color: var(--border);
+}
+
+.tracking-label {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.tracking-value {
+  font-family: var(--font-mono);
+  font-size: 1.2rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.tracking-detail {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  opacity: 0.7;
+  margin-top: 6px;
+  line-height: 1.7;
+}
+
+.stub-cta {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+.habits-subgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 6px;
+}
+
+.habit-chip {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.habit-name {
+  font-size: 0.68rem;
+  font-weight: 500;
+  text-transform: capitalize;
+  color: var(--text-muted);
+}
+
+.habit-streak {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.habit-streak.active { color: var(--green-bright); }
+.habit-streak.inactive { color: var(--text-dim); }
+
+.habit-rate {
+  font-family: var(--font-mono);
+  font-size: 0.54rem;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+/* ── Empty State ── */
+.empty-state {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  padding: 12px 0;
+  line-height: 1.6;
+}
+
+.empty-state a {
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+
+/* ── Footer ── */
+.dash-footer {
+  padding: 48px 0 32px;
+  text-align: center;
+  margin-top: 32px;
+}
+
+.dash-footer p {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  opacity: 0.5;
+  line-height: 2;
+}
+
+.dash-footer a {
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 700px) {
+  .hero-card { padding: 36px 24px 32px; }
+  .assessment-stats { gap: 28px; }
+  .moves-grid { grid-template-columns: 1fr; }
+  .patterns-grid { grid-template-columns: 1fr; }
+  .recovery-grid { grid-template-columns: 1fr; }
+  .tracking-grid { grid-template-columns: 1fr; }
+  .metric-row { grid-template-columns: 1fr auto auto; }
+  .metric-unit-col { display: none; }
+  .hero-flywheel { gap: 8px; }
+}
+
+/* ── Animations ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.reveal { opacity: 0; animation: fadeUp 0.45s ease forwards; }
+.reveal-d1 { animation-delay: 0.05s; }
+.reveal-d2 { animation-delay: 0.1s; }
+.reveal-d3 { animation-delay: 0.15s; }
+</style>
+</head>
+<body>
+
+<!-- Sticky Header -->
+<nav class="sticky-nav">
+  <div class="sticky-nav-inner">
+    <span class="nav-title">Health Engine</span>
+    <div class="nav-meta">
+      <span class="nav-date" id="date-display"></span>
+      <span class="freshness-pill" id="freshness-pill"></span>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- Hero: Frosted glass, center-aligned, flywheel -->
+  <div class="hero reveal">
+    <div class="hero-card">
+      <div class="coverage-ring-wrap">
+        <svg viewBox="0 0 130 130">
+          <circle class="ring-bg" cx="65" cy="65" r="56" />
+          <circle class="ring-glow" id="ring-glow" cx="65" cy="65" r="56"
+            stroke="var(--green-bright)" stroke-dasharray="0 352" transform="rotate(-90 65 65)" />
+          <circle class="ring-track" id="coverage-ring" cx="65" cy="65" r="56"
+            stroke="var(--green-bright)" stroke-dasharray="0 352" transform="rotate(-90 65 65)" />
+        </svg>
+        <div class="ring-center">
+          <div class="ring-pct-big" id="ring-pct-big">--<span class="ring-pct-unit">%</span></div>
+          <div class="ring-label">Coverage</div>
+        </div>
+      </div>
+      <div class="assessment-stats">
+        <div class="stat-block">
+          <div class="stat-value" id="avg-pct">--</div>
+          <div class="stat-label">Avg Percentile</div>
+        </div>
+        <div class="stat-block">
+          <div class="stat-value" id="measured-count">--</div>
+          <div class="stat-label">Measured</div>
+        </div>
+        <div class="stat-block">
+          <div class="stat-value" id="gap-count">--</div>
+          <div class="stat-label">Gaps</div>
+        </div>
+      </div>
+      <div class="hero-flywheel">
+        <span class="flywheel-step">Your Score</span>
+        <span class="flywheel-arrow">&rarr;</span>
+        <span class="flywheel-step">Your Body</span>
+        <span class="flywheel-arrow">&rarr;</span>
+        <span class="flywheel-step">Your Actions</span>
+        <span class="flywheel-arrow" style="opacity:0.35;">&circlearrowright;</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Next Moves -->
+  <div class="moves-section reveal reveal-d1">
+    <div class="section-label">Next Moves</div>
+    <div class="moves-grid" id="moves-grid"></div>
+  </div>
+
+  <!-- ═══ YOUR SCORE ═══ -->
+  <div class="section-group-header">Your Score</div>
+
+  <!-- Insights -->
+  <div class="collapsible open" id="section-insights">
+    <button class="collapsible-trigger" onclick="toggleSection('section-insights')">
+      <span class="trigger-left">Insights <span class="trigger-badge" id="insights-badge"></span></span>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="collapsible-content" id="insights-content"></div>
+  </div>
+
+  <!-- Compound Patterns -->
+  <div class="collapsible open" id="section-patterns">
+    <button class="collapsible-trigger" onclick="toggleSection('section-patterns')">
+      <span class="trigger-left">Compound Patterns <span class="trigger-badge" id="patterns-badge"></span></span>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="collapsible-content" id="patterns-content"></div>
+  </div>
+
+  <!-- Health Status -->
+  <div class="collapsible open" id="section-status">
+    <button class="collapsible-trigger" onclick="toggleSection('section-status')">
+      <span class="trigger-left">Health Status <span class="trigger-badge" id="status-badge"></span></span>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="collapsible-content" id="status-content"></div>
+  </div>
+
+  <!-- ═══ YOUR BODY ═══ -->
+  <div class="section-group-header">Your Body</div>
+
+  <!-- Recovery Trends -->
+  <div class="collapsible open" id="section-recovery">
+    <button class="collapsible-trigger" onclick="toggleSection('section-recovery')">
+      <span class="trigger-left">Recovery <span class="trigger-badge" id="recovery-badge"></span></span>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="collapsible-content" id="recovery-content"></div>
+  </div>
+
+  <!-- Body Composition -->
+  <div class="collapsible open" id="section-bodycomp">
+    <button class="collapsible-trigger" onclick="toggleSection('section-bodycomp')">
+      <span class="trigger-left">Body Composition <span class="trigger-badge" id="bodycomp-badge"></span></span>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="collapsible-content" id="bodycomp-content"></div>
+  </div>
+
+  <!-- ═══ YOUR ACTIONS ═══ -->
+  <div class="section-group-header">Your Actions</div>
+
+  <!-- Movement -->
+  <div class="collapsible open" id="section-movement">
+    <button class="collapsible-trigger" onclick="toggleSection('section-movement')">
+      <span class="trigger-left">Movement <span class="trigger-badge" id="movement-badge"></span></span>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="collapsible-content" id="movement-content"></div>
+  </div>
+
+  <!-- Nutrition -->
+  <div class="collapsible open" id="section-nutrition">
+    <button class="collapsible-trigger" onclick="toggleSection('section-nutrition')">
+      <span class="trigger-left">Nutrition <span class="trigger-badge" id="nutrition-badge"></span></span>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="collapsible-content" id="nutrition-content"></div>
+  </div>
+
+  <!-- Habits -->
+  <div class="collapsible open" id="section-habits">
+    <button class="collapsible-trigger" onclick="toggleSection('section-habits')">
+      <span class="trigger-left">Habits <span class="trigger-badge" id="habits-badge"></span></span>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="collapsible-content" id="habits-content"></div>
+  </div>
+
+  <div class="dash-footer">
+    <p>Open source. Local-first. Your data never touches a server.<br>
+    <a href="https://mybaseline.health/health-engine/methodology/">Methodology</a> &middot; <a href="https://github.com/a-deal/health-engine">GitHub</a></p>
+  </div>
+
+</div>
+
+<script>
+function toggleSection(id) {
+  document.getElementById(id).classList.toggle('open');
+}
+
+function formatDate(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function freshness(dateStr) {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const hrs = Math.floor((now - d) / 3600000);
+  if (hrs < 1) return { text: 'just now', cls: 'fresh' };
+  if (hrs < 24) return { text: hrs + 'h ago', cls: 'fresh' };
+  const days = Math.floor(hrs / 24);
+  if (days <= 3) return { text: days + 'd ago', cls: 'fresh' };
+  if (days <= 30) return { text: days + 'd ago', cls: 'aging' };
+  const months = Math.floor(days / 30);
+  return { text: months + 'mo ago', cls: 'stale' };
+}
+
+const ZONE_MAP = {
+  'Optimal': { pill: 'pill-optimal' },
+  'Good': { pill: 'pill-good' },
+  'Average': { pill: 'pill-average' },
+  'Below Average': { pill: 'pill-below' },
+  'Concerning': { pill: 'pill-concerning' },
+};
+
+function formatHabitName(key) { return key.replace(/_/g, ' '); }
+function formatLiftName(key) { return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()); }
+
+function generateCoachRead(briefing) {
+  function firstSentences(text, n) {
+    const sentences = text.match(/[^.]*[a-zA-Z][^.]*\./g) || [text];
+    return sentences.slice(0, n).join(' ').trim();
+  }
+  const insights = briefing.insights || [];
+  const critical = insights.filter(i => i.severity === 'critical');
+  const warnings = insights.filter(i => i.severity === 'warning');
+  if (critical.length) return firstSentences(critical[0].body, 2);
+  if (warnings.length >= 2) {
+    return `<strong>${warnings[0].title.split('\u2014')[0].trim()}</strong> and <strong>${warnings[1].title.split('\u2014')[0].trim()}</strong> are the two flags. ${firstSentences(warnings[0].body, 1)}`;
+  }
+  if (warnings.length) return firstSentences(warnings[0].body, 2);
+  const positive = insights.filter(i => i.severity === 'positive');
+  if (positive.length) return firstSentences(positive[0].body, 2);
+  return 'All signals stable. Keep doing what you\'re doing.';
+}
+
+function drawSparkline(container, data, color) {
+  if (!container || !data || data.length < 2) return;
+  const vals = data.filter(v => v !== null);
+  if (vals.length < 2) return;
+  const w = 200, h = 36, pad = 3;
+  const min = Math.min(...vals), max = Math.max(...vals), range = max - min || 1;
+  const points = data.map((v, i) => {
+    if (v === null) return null;
+    return `${(i / (data.length - 1)) * w},${pad + ((max - v) / range) * (h - pad * 2)}`;
+  }).filter(Boolean);
+  if (points.length < 2) return;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.style.height = '36px';
+  const firstX = points[0].split(',')[0], lastX = points[points.length - 1].split(',')[0];
+  const area = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+  area.setAttribute('points', `${firstX},${h} ${points.join(' ')} ${lastX},${h}`);
+  area.setAttribute('fill', color); area.setAttribute('opacity', '0.05');
+  svg.appendChild(area);
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+  line.setAttribute('points', points.join(' '));
+  line.setAttribute('fill', 'none'); line.setAttribute('stroke', color);
+  line.setAttribute('stroke-width', '1.5'); line.setAttribute('stroke-linecap', 'round');
+  svg.appendChild(line);
+  const lp = points[points.length - 1].split(',');
+  const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  dot.setAttribute('cx', lp[0]); dot.setAttribute('cy', lp[1]);
+  dot.setAttribute('r', '2.5'); dot.setAttribute('fill', color);
+  svg.appendChild(dot);
+  container.appendChild(svg);
+}
+
+// ── Methodology Constants ──
+// The complete methodology maps into dashboard sections.
+// These define what SHOULD exist in each section, so we can stub gaps.
+const METHODOLOGY = {
+  recovery: [
+    { key: 'rhr', label: 'Resting Heart Rate', unit: 'bpm', tier: 1, garminField: 'resting_hr', color: 'blue' },
+    { key: 'hrv', label: 'HRV (RMSSD)', unit: 'ms', tier: 2, garminField: 'hrv_rmssd_avg', color: 'green' },
+    { key: 'sleep_duration', label: 'Sleep Duration', unit: 'hrs', tier: 1, garminField: 'sleep_duration_avg', color: 'amber' },
+    { key: 'sleep_regularity', label: 'Sleep Regularity', unit: 'min std dev', tier: 1, garminField: 'sleep_regularity_stddev', color: 'red' },
+    { key: 'vo2_max', label: 'VO2 Max', unit: 'mL/kg/min', tier: 2, garminField: 'vo2_max', color: 'green', cost: 'Free with Garmin/Apple Watch' },
+  ],
+  bodyComp: [
+    { key: 'weight', label: 'Weight Trends', tier: 2, cost: '$20-50 smart scale' },
+    { key: 'waist', label: 'Waist Circumference', tier: 1, cost: '$3 tape measure' },
+  ],
+  movement: [
+    { key: 'steps', label: 'Daily Steps', unit: 'steps/day', tier: 1, garminField: 'daily_steps_avg', target: 10000 },
+    { key: 'zone2', label: 'Zone 2 Cardio', unit: 'min/week', tier: 2, garminField: 'zone2_min_per_week', target: 150 },
+    { key: 'vo2_max', label: 'VO2 Max', unit: 'mL/kg/min', tier: 2, garminField: 'vo2_max', cost: 'Free with Garmin/Apple Watch' },
+  ],
+};
+
+// ── Renders ──
+function renderHeader(briefing) {
+  document.getElementById('date-display').textContent = formatDate(briefing.as_of);
+  const pill = document.getElementById('freshness-pill');
+  if (briefing.garmin && briefing.garmin.last_updated) {
+    const f = freshness(briefing.garmin.last_updated);
+    pill.textContent = 'Garmin ' + f.text;
+    pill.className = 'freshness-pill freshness-' + (f.cls === 'fresh' ? 'fresh' : f.cls === 'aging' ? 'stale' : 'old');
+  }
+}
+
+function renderHero(briefing) {
+  const score = briefing.score;
+  const circ = 2 * Math.PI * 56;
+  const filled = (score.coverage / 100) * circ;
+  document.getElementById('coverage-ring').setAttribute('stroke-dasharray', `${filled} ${circ}`);
+  document.getElementById('ring-glow').setAttribute('stroke-dasharray', `${filled} ${circ}`);
+  document.getElementById('ring-pct-big').innerHTML = score.coverage + '<span class="ring-pct-unit">%</span>';
+  document.getElementById('avg-pct').textContent = score.avg_percentile + 'th';
+  const measured = score.results.length;
+  document.getElementById('measured-count').textContent = measured + '/' + (measured + score.gap_count);
+  document.getElementById('gap-count').textContent = score.gap_count;
+}
+
+function renderMoves(briefing) {
+  const grid = document.getElementById('moves-grid');
+  (briefing.score.top_gaps || []).slice(0, 3).forEach(gap => {
+    const card = document.createElement('div');
+    card.className = 'move-card';
+    card.innerHTML = `
+      <div class="move-metric">${gap.name}</div>
+      <div class="move-action">Close this gap to sharpen the picture.</div>
+      <div class="move-meta">
+        <span class="move-cost">${gap.cost}</span>
+        <span class="move-impact">+${gap.weight} pts</span>
+      </div>`;
+    grid.appendChild(card);
+  });
+}
+
+function renderInsights(briefing) {
+  const container = document.getElementById('insights-content');
+  const insights = briefing.insights || [];
+  const badge = document.getElementById('insights-badge');
+  const critical = insights.filter(i => i.severity === 'critical').length;
+  const warnings = insights.filter(i => i.severity === 'warning').length;
+  if (critical) { badge.textContent = `${insights.length} (${critical} critical)`; badge.className = 'trigger-badge has-critical'; }
+  else if (warnings) { badge.textContent = `${insights.length} (${warnings} warning)`; badge.className = 'trigger-badge has-warning'; }
+  else { badge.textContent = insights.length; badge.className = 'trigger-badge'; }
+
+  let html = `<div class="coach-read">${generateCoachRead(briefing)}</div>`;
+
+  const order = { critical: 0, warning: 1, positive: 2, neutral: 3 };
+  const sorted = [...insights].sort((a, b) => (order[a.severity] ?? 3) - (order[b.severity] ?? 3));
+  const badgeMap = { critical: 'badge-critical', warning: 'badge-warning', positive: 'badge-positive' };
+
+  html += '<div class="insights-list">';
+  sorted.forEach(ins => {
+    const bCls = badgeMap[ins.severity] || '';
+    const bText = ins.severity === 'neutral' ? '' : `<span class="insight-badge ${bCls}">${ins.severity}</span>`;
+    html += `<div class="insight-card severity-${ins.severity}">
+      <div class="insight-header"><span class="insight-title">${ins.title}</span>${bText}</div>
+      <div class="insight-body">${ins.body}</div>
+    </div>`;
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function renderPatterns(briefing) {
+  const container = document.getElementById('patterns-content');
+  const patterns = briefing.patterns || [];
+  const badge = document.getElementById('patterns-badge');
+  const detected = patterns.filter(p => p.detected);
+  if (detected.length) { badge.textContent = detected.length + ' detected'; badge.className = 'trigger-badge has-critical'; }
+  else { badge.textContent = 'all clear'; badge.className = 'trigger-badge has-positive'; }
+
+  let html = '<div class="patterns-grid">';
+  patterns.forEach(p => {
+    const dotCls = p.detected ? 'detected' : 'clear';
+    const statusCls = p.detected ? 'pattern-detected' : 'pattern-clear';
+    const cardCls = p.detected ? ' detected' : '';
+    html += `<div class="pattern-card${cardCls}">
+      <div class="pattern-name">${p.name}</div>
+      <div class="pattern-status ${statusCls}"><span class="status-dot ${dotCls}"></span> ${p.detected ? 'Detected' : 'Clear'}</div>
+      <div class="pattern-criteria">${p.criteria_met}/${p.criteria_total} criteria</div>
+      ${p.metrics.length ? `<div class="pattern-metrics">${p.metrics.join(' \u00b7 ')}</div>` : ''}
+    </div>`;
+  });
+  html += '</div>';
+  if (!detected.length) html += '<div class="no-patterns"><strong>No compound patterns flagged.</strong> No dangerous combinations detected.</div>';
+  container.innerHTML = html;
+}
+
+function renderStatus(briefing) {
+  const container = document.getElementById('status-content');
+  const results = briefing.score.results || [];
+  const gaps = briefing.score.top_gaps || [];
+  const badge = document.getElementById('status-badge');
+  const concerning = results.filter(r => r.standing === 'Concerning').length;
+  const below = results.filter(r => r.standing === 'Below Average').length;
+  if (concerning) { badge.textContent = concerning + ' concerning'; badge.className = 'trigger-badge has-critical'; }
+  else if (below) { badge.textContent = below + ' below avg'; badge.className = 'trigger-badge has-warning'; }
+  else { badge.textContent = results.length + ' scored'; badge.className = 'trigger-badge'; }
+
+  const tier1 = results.filter(r => r.tier === 1), tier2 = results.filter(r => r.tier === 2);
+
+  function renderTier(label, metrics, tierId) {
+    const collapsed = tierId > 1 ? ' collapsed' : '';
+    let h = `<div class="tier-header${collapsed}" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'flex';">
+      <span>${label}</span>
+      <svg class="tier-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </div>`;
+    h += `<div class="metrics-list" style="display:${tierId > 1 ? 'none' : 'flex'}; flex-direction:column;">`;
+    metrics.forEach(r => {
+      const z = ZONE_MAP[r.standing] || { pill: 'pill-average' };
+      h += `<div class="metric-row">
+        <div class="metric-info"><span class="metric-name">${r.name}</span>${r.percentile_approx != null ? `<span class="metric-pct">${r.percentile_approx}th percentile</span>` : ''}</div>
+        <span class="metric-value-col">${r.value != null ? r.value : '\u2014'}</span>
+        <span class="metric-unit-col">${r.unit || ''}</span>
+        <span class="zone-pill ${z.pill}">${r.standing}</span>
+      </div>`;
+    });
+    h += '</div>';
+    return h;
+  }
+
+  let html = '';
+  if (tier1.length) html += renderTier('Tier 1 \u2014 High Impact', tier1, 1);
+  if (tier2.length) html += renderTier('Tier 2 \u2014 Supporting', tier2, 2);
+  if (gaps.length) {
+    html += `<div class="tier-header collapsed" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'flex';">
+      <span>Gaps \u2014 ${gaps.length} unmeasured</span>
+      <svg class="tier-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </div><div class="metrics-list" style="display:none; flex-direction:column;">`;
+    gaps.forEach(g => {
+      html += `<div class="metric-row unmeasured">
+        <div class="metric-info"><span class="metric-name">${g.name}</span></div>
+        <span class="metric-value-col">\u2014</span>
+        <span class="metric-unit-col"></span>
+        <span class="gap-cost">${g.cost}</span>
+      </div>`;
+    });
+    html += '</div>';
+  }
+  container.innerHTML = html;
+}
+
+function renderRecovery(briefing, garminDaily) {
+  const container = document.getElementById('recovery-content');
+  const badge = document.getElementById('recovery-badge');
+  const g = briefing.garmin;
+  const hasGarmin = g && g.last_updated;
+
+  const metrics = METHODOLOGY.recovery;
+  const measured = hasGarmin ? metrics.filter(m => g[m.garminField] != null).length : 0;
+  badge.textContent = measured + '/' + metrics.length + ' tracked';
+  if (measured === metrics.length) badge.className = 'trigger-badge has-positive';
+
+  let html = '<div class="recovery-grid">';
+
+  if (hasGarmin) {
+    // RHR
+    html += `<div class="recovery-card">
+      <div class="recovery-label"><span class="rdot rdot-blue"></span> Resting Heart Rate</div>
+      <div class="recovery-value">${g.resting_hr}<span class="recovery-unit"> bpm</span></div>
+      <div class="recovery-delta delta-neutral" id="rhr-trend"></div>
+      <div class="sparkline-wrap" id="rhr-sparkline"></div>
+      <div class="sparkline-axis"><span>90d ago</span><span>today</span></div>
+    </div>`;
+
+    // HRV
+    html += `<div class="recovery-card">
+      <div class="recovery-label"><span class="rdot rdot-green"></span> HRV (RMSSD)</div>
+      <div class="recovery-value">${g.hrv_rmssd_avg}<span class="recovery-unit"> ms</span></div>
+      <div class="recovery-delta delta-neutral" id="hrv-trend"></div>
+      <div class="sparkline-wrap" id="hrv-sparkline"></div>
+      <div class="sparkline-axis"><span>90d ago</span><span>today</span></div>
+    </div>`;
+
+    // Sleep Duration
+    const durPct = Math.max(0, Math.min(100, ((g.sleep_duration_avg - 4) / 6) * 100));
+    const durColor = g.sleep_duration_avg >= 7 ? 'var(--green-bright)' : 'var(--amber)';
+    html += `<div class="recovery-card">
+      <div class="recovery-label"><span class="rdot rdot-amber"></span> Sleep Duration</div>
+      <div class="recovery-value">${g.sleep_duration_avg}<span class="recovery-unit"> hrs</span></div>
+      <div class="recovery-delta ${g.sleep_duration_avg >= 7 ? 'delta-good' : 'delta-bad'}">${g.sleep_duration_avg >= 7 ? 'On target' : 'Below 7hr target'}</div>
+      <div class="gauge-track"><div class="gauge-fill" style="width:${durPct}%;background:${durColor};"></div></div>
+      <div class="gauge-labels"><span>4</span><span class="target">7 target</span><span>10</span></div>
+    </div>`;
+
+    // Sleep Regularity
+    const reg = g.sleep_regularity_stddev;
+    const regPct = Math.max(0, Math.min(100, ((reg - 15) / 165) * 100));
+    const regColor = reg < 45 ? 'var(--green-bright)' : reg < 60 ? 'var(--amber)' : 'var(--red)';
+    html += `<div class="recovery-card">
+      <div class="recovery-label"><span class="rdot rdot-red"></span> Sleep Regularity</div>
+      <div class="recovery-value">\u00b1${Math.round(reg)}<span class="recovery-unit"> min</span></div>
+      <div class="recovery-delta ${reg < 45 ? 'delta-good' : 'delta-bad'}">${reg < 45 ? 'Good regularity' : reg < 60 ? 'Needs improvement' : 'Concerning'}</div>
+      <div class="gauge-track"><div class="gauge-fill" style="width:${regPct}%;background:${regColor};"></div></div>
+      <div class="gauge-labels"><span>15</span><span class="concern">60+ concern</span><span>180</span></div>
+    </div>`;
+
+    // VO2 Max — stub if null
+    if (g.vo2_max != null) {
+      html += `<div class="recovery-card">
+        <div class="recovery-label"><span class="rdot rdot-green"></span> VO2 Max</div>
+        <div class="recovery-value">${g.vo2_max}<span class="recovery-unit"> mL/kg/min</span></div>
+        <div class="recovery-delta delta-neutral">Strongest predictor of all-cause mortality</div>
+      </div>`;
+    } else {
+      html += `<div class="recovery-card stub">
+        <div class="recovery-label"><span class="rdot rdot-dim"></span> VO2 Max</div>
+        <div class="recovery-value" style="color:var(--text-dim);">\u2014</div>
+        <div class="stub-cta">Strongest mortality predictor. Free with Garmin/Apple Watch estimate.</div>
+      </div>`;
+    }
+  } else {
+    // No wearable data — show all as stubs
+    metrics.forEach(m => {
+      html += `<div class="recovery-card stub">
+        <div class="recovery-label"><span class="rdot rdot-dim"></span> ${m.label}</div>
+        <div class="recovery-value" style="color:var(--text-dim);">\u2014</div>
+        <div class="stub-cta">${m.cost || 'Connect a wearable to track'}</div>
+      </div>`;
+    });
+  }
+  html += '</div>';
+  container.innerHTML = html;
+
+  // Sparklines
+  if (hasGarmin && garminDaily && garminDaily.length) {
+    drawSparkline(document.getElementById('rhr-sparkline'), garminDaily.map(d => d.rhr), 'var(--blue)');
+    drawSparkline(document.getElementById('hrv-sparkline'), garminDaily.map(d => d.hrv), 'var(--green-bright)');
+    const rhrVals = garminDaily.filter(d => d.rhr).map(d => d.rhr);
+    if (rhrVals.length > 14) {
+      const early = rhrVals.slice(0, 14).reduce((a, b) => a + b) / 14;
+      const late = rhrVals.slice(-14).reduce((a, b) => a + b) / 14;
+      const delta = (late - early).toFixed(1);
+      const el = document.getElementById('rhr-trend');
+      if (el) {
+        el.textContent = `90d: ${early.toFixed(0)} \u2192 ${late.toFixed(0)} bpm (${delta < 0 ? '\u2193' : '\u2191'}${Math.abs(delta)})`;
+        el.className = 'recovery-delta ' + (delta <= 0 ? 'delta-good' : 'delta-bad');
+      }
+    }
+    const hrvVals = garminDaily.filter(d => d.hrv).map(d => d.hrv);
+    if (hrvVals.length > 14) {
+      const early = hrvVals.slice(0, 14).reduce((a, b) => a + b) / 14;
+      const late = hrvVals.slice(-14).reduce((a, b) => a + b) / 14;
+      const delta = (late - early).toFixed(1);
+      const el = document.getElementById('hrv-trend');
+      if (el) {
+        el.textContent = `90d: ${early.toFixed(0)} \u2192 ${late.toFixed(0)} ms (${delta > 0 ? '\u2191' : '\u2193'}${Math.abs(delta)})`;
+        el.className = 'recovery-delta ' + (delta >= 0 ? 'delta-good' : 'delta-bad');
+      }
+    }
+  }
+}
+
+function renderBodyComp(briefing) {
+  const container = document.getElementById('bodycomp-content');
+  const badge = document.getElementById('bodycomp-badge');
+  const w = briefing.weight;
+
+  // Check which methodology items are measured
+  const hasWeight = w && w.current;
+  // Waist comes from scored results
+  const waistResult = (briefing.score.results || []).find(r => r.name === 'Waist Circumference');
+  const hasWaist = waistResult && waistResult.has_data;
+  const measured = (hasWeight ? 1 : 0) + (hasWaist ? 1 : 0);
+  badge.textContent = measured + '/' + METHODOLOGY.bodyComp.length + ' tracked';
+
+  let html = '<div class="tracking-grid">';
+
+  // Weight — tracked or stub
+  if (hasWeight) {
+    html += `<div class="tracking-card"><div class="tracking-label">Weight</div>
+      <div class="tracking-value">${w.current}<span class="recovery-unit"> lbs</span></div>
+      <div class="tracking-detail">7d avg: ${w.rolling_avg_7d || '\u2014'}<br>Rate: ${w.weekly_rate > 0 ? '+' : ''}${w.weekly_rate} lbs/wk${w.remaining ? `<br>${w.remaining} lbs to ${w.target}` : ''}</div>
+    </div>`;
+  } else {
+    html += `<div class="tracking-card stub"><div class="tracking-label">Weight</div>
+      <div class="tracking-value" style="color:var(--text-dim);">\u2014</div>
+      <div class="stub-cta">$20-50 smart scale or manual logging</div>
+    </div>`;
+  }
+
+  // Waist circumference — tracked or stub
+  if (hasWaist) {
+    html += `<div class="tracking-card"><div class="tracking-label">Waist Circumference</div>
+      <div class="tracking-value">${waistResult.value}<span class="recovery-unit"> ${waistResult.unit || 'in'}</span></div>
+      <div class="tracking-detail">${waistResult.clinical_note || ''}</div>
+    </div>`;
+  } else {
+    html += `<div class="tracking-card stub"><div class="tracking-label">Waist Circumference</div>
+      <div class="tracking-value" style="color:var(--text-dim);">\u2014</div>
+      <div class="stub-cta">Tier 1 metric. $3 tape measure. Better than BMI for visceral fat risk.</div>
+    </div>`;
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function renderMovement(briefing) {
+  const container = document.getElementById('movement-content');
+  const badge = document.getElementById('movement-badge');
+  const g = briefing.garmin;
+  const hasGarmin = g && g.last_updated;
+  const strength = briefing.strength;
+  const lifts = strength ? Object.entries(strength).filter(([_, d]) => d && d.current_1rm) : [];
+
+  // Count methodology movement metrics that are tracked
+  let trackedCount = 0;
+  let totalCount = METHODOLOGY.movement.length;
+  if (hasGarmin) {
+    METHODOLOGY.movement.forEach(m => {
+      if (g[m.garminField] != null) trackedCount++;
+    });
+  }
+
+  const parts = [];
+  if (trackedCount > 0) parts.push(trackedCount + '/' + totalCount + ' metrics');
+  if (lifts.length) parts.push(lifts.length + ' lifts');
+  badge.textContent = parts.join(' \u00b7 ') || '0/' + totalCount + ' tracked';
+
+  let html = '';
+
+  // Movement methodology metrics (steps, zone 2, VO2 max)
+  html += '<div class="tracking-grid">';
+
+  if (hasGarmin && g.daily_steps_avg != null) {
+    const stepsColor = g.daily_steps_avg >= 10000 ? 'var(--green-bright)' : g.daily_steps_avg >= 7000 ? 'var(--amber)' : 'var(--text-dim)';
+    html += `<div class="tracking-card"><div class="tracking-label">Daily Steps</div>
+      <div class="tracking-value" style="color:${stepsColor}">${g.daily_steps_avg.toLocaleString()}<span class="recovery-unit"> /day</span></div>
+      <div class="tracking-detail">Tier 1 metric. Target: 10,000+<br>Each 2,000 steps reduces all-cause mortality ~8-11%</div>
+    </div>`;
+  } else {
+    html += `<div class="tracking-card stub"><div class="tracking-label">Daily Steps</div>
+      <div class="tracking-value" style="color:var(--text-dim);">\u2014</div>
+      <div class="stub-cta">Tier 1 metric. Free with phone or wearable.</div>
+    </div>`;
+  }
+
+  if (hasGarmin && g.zone2_min_per_week != null) {
+    const z2Color = g.zone2_min_per_week >= 150 ? 'var(--green-bright)' : 'var(--amber)';
+    html += `<div class="tracking-card"><div class="tracking-label">Zone 2 Cardio</div>
+      <div class="tracking-value" style="color:${z2Color}">${g.zone2_min_per_week}<span class="recovery-unit"> min/wk</span></div>
+      <div class="tracking-detail">Target: 150+ min/week (AHA guideline)<br>Supports fat oxidation and cardiovascular health</div>
+    </div>`;
+  } else {
+    html += `<div class="tracking-card stub"><div class="tracking-label">Zone 2 Cardio</div>
+      <div class="tracking-value" style="color:var(--text-dim);">\u2014</div>
+      <div class="stub-cta">Free with HR wearable. 150 min/wk target.</div>
+    </div>`;
+  }
+
+  // VO2 Max in movement context (if not already shown in recovery, or as reinforcement)
+  if (hasGarmin && g.vo2_max != null) {
+    html += `<div class="tracking-card"><div class="tracking-label">VO2 Max</div>
+      <div class="tracking-value">${g.vo2_max}<span class="recovery-unit"> mL/kg/min</span></div>
+      <div class="tracking-detail">Strongest single predictor of all-cause mortality (Mandsager et al.)</div>
+    </div>`;
+  } else if (!hasGarmin || g.vo2_max == null) {
+    html += `<div class="tracking-card stub"><div class="tracking-label">VO2 Max</div>
+      <div class="tracking-value" style="color:var(--text-dim);">\u2014</div>
+      <div class="stub-cta">Strongest mortality predictor. Free estimate from Garmin/Apple Watch.</div>
+    </div>`;
+  }
+
+  html += '</div>';
+
+  // Strength lifts (user-logged)
+  if (lifts.length) {
+    html += '<div style="margin-top:12px;"><div class="tracking-grid">';
+    lifts.forEach(([name, data]) => {
+      html += `<div class="tracking-card"><div class="tracking-label">${formatLiftName(name)}</div>
+        <div class="tracking-value">${data.current_1rm}<span class="recovery-unit"> e1RM</span></div>
+        <div class="tracking-detail">Peak: ${data.peak_1rm} (${data.peak_pct}%) \u00b7 ${data.total_sets} sets</div>
+      </div>`;
+    });
+    html += '</div></div>';
+  } else {
+    html += `<div class="empty-state" style="margin-top:10px;">No strength data logged yet. Log lifts to track estimated 1RMs over time.</div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+function renderNutrition(briefing) {
+  const container = document.getElementById('nutrition-content');
+  const badge = document.getElementById('nutrition-badge');
+  const n = briefing.nutrition;
+
+  if (!n) {
+    badge.textContent = 'not tracked';
+    container.innerHTML = '<div class="empty-state">No nutrition data. Log meals to track protein and macros against your targets.</div>';
+    return;
+  }
+
+  const t = n.today_totals || {}, r = n.remaining || {};
+  const hasMeals = t.protein_g || t.calories;
+  const proteinTarget = r.protein_g != null ? Math.round((t.protein_g || 0) + r.protein_g) : null;
+
+  badge.textContent = hasMeals ? (t.protein_g || 0) + 'g protein' : 'no meals today';
+
+  let html = '';
+  if (hasMeals) {
+    html += `<div class="tracking-card"><div class="tracking-label">Today's Macros</div>
+      <div class="tracking-value">${t.protein_g || 0}<span class="recovery-unit">g protein</span></div>
+      <div class="tracking-detail">${t.calories ? t.calories + ' cal' : ''}${t.carbs_g ? ' \u00b7 ' + t.carbs_g + 'g C' : ''}${t.fat_g ? ' \u00b7 ' + t.fat_g + 'g F' : ''}${proteinTarget ? `<br>${r.protein_g > 0 ? r.protein_g + 'g protein remaining' : 'Protein target hit'}` : ''}</div>
+      ${n.protein_warning ? `<div class="tracking-detail" style="color:var(--amber);margin-top:4px;">${n.protein_warning}</div>` : ''}
+    </div>`;
+  } else {
+    html += `<div class="empty-state">No meals logged today.${proteinTarget ? ` Target: ${proteinTarget}g protein.` : ''}</div>`;
+  }
+  container.innerHTML = html;
+}
+
+function renderHabits(briefing) {
+  const container = document.getElementById('habits-content');
+  const badge = document.getElementById('habits-badge');
+
+  if (!briefing.habits) {
+    badge.textContent = 'not tracked';
+    container.innerHTML = '<div class="empty-state">No habits configured. Habits connect daily actions to health outcomes.</div>';
+    return;
+  }
+
+  const entries = Object.entries(briefing.habits).filter(([_, data]) => data && data.current_streak != null).sort((a, b) => b[1].current_streak - a[1].current_streak);
+  if (!entries.length) {
+    badge.textContent = 'none';
+    container.innerHTML = '<div class="empty-state">No habit data yet. Start logging to build streaks.</div>';
+    return;
+  }
+
+  const active = entries.filter(([_, d]) => d.current_streak > 0).length;
+  badge.textContent = active + '/' + entries.length + ' active';
+
+  let html = '<div class="habits-subgrid">';
+  entries.forEach(([name, data]) => {
+    html += `<div class="habit-chip">
+      <span class="habit-name">${formatHabitName(name)}</span>
+      <span class="habit-streak ${data.current_streak > 0 ? 'active' : 'inactive'}">${data.current_streak}d</span>
+      <span class="habit-rate">${data.completion_rate}% \u00b7 best ${data.longest_streak}d</span>
+    </div>`;
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+async function init() {
+  try {
+    const [briefingRes, garminRes] = await Promise.all([
+      fetch('../data/briefing.json'),
+      fetch('../data/garmin_daily.json').catch(() => null),
+    ]);
+    const briefing = await briefingRes.json();
+    const garminDaily = garminRes ? await garminRes.json().catch(() => null) : null;
+
+    renderHeader(briefing);
+    renderHero(briefing);
+    renderMoves(briefing);
+    // Your Score
+    renderInsights(briefing);
+    renderPatterns(briefing);
+    renderStatus(briefing);
+    // Your Body
+    renderRecovery(briefing, garminDaily);
+    renderBodyComp(briefing);
+    // Your Actions
+    renderMovement(briefing);
+    renderNutrition(briefing);
+    renderHabits(briefing);
+  } catch (err) {
+    console.error('Failed to load data:', err);
+    document.querySelector('.container').innerHTML += `<div style="padding:40px 0;color:var(--red);font-family:var(--font-mono);font-size:0.8rem;">Error: ${err.message}<br>Run: python3 cli.py briefing > data/briefing.json</div>`;
+  }
+}
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Health Engine</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #FAFAF7;
+  --surface: #FFFFFF;
+  --surface-2: #F3F1EC;
+  --border: #E5E0D8;
+  --text: #1B2A22;
+  --text-dim: #5C6B63;
+  --text-muted: #9CA89F;
+  --forest: #0A3622;
+  --forest-dim: rgba(10, 54, 34, 0.06);
+  --green: #2D6A4F;
+  --green-dim: rgba(45, 106, 79, 0.08);
+  --amber: #C17817;
+  --amber-dim: rgba(193, 120, 23, 0.08);
+  --coral: #B84233;
+  --coral-dim: rgba(184, 66, 51, 0.06);
+  --violet: #6B5CA5;
+  --violet-dim: rgba(107, 92, 165, 0.08);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+  padding: 48px 40px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.section { margin-bottom: 56px; }
+
+.section-divider {
+  height: 1px;
+  background: var(--border);
+  margin-bottom: 48px;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 6px;
+}
+
+.header h1 {
+  font-family: 'Sora', sans-serif;
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--forest);
+  letter-spacing: -0.5px;
+}
+
+.header .tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--green);
+  background: var(--green-dim);
+  padding: 3px 10px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.subheader {
+  font-size: 15px;
+  color: var(--text-dim);
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+/* Coverage Hero */
+.coverage-hero {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 40px;
+  align-items: center;
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 36px 44px;
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.coverage-arc { position: relative; width: 150px; height: 150px; }
+
+.coverage-arc .score-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.coverage-arc .score-number {
+  font-family: 'Sora', sans-serif;
+  font-size: 44px;
+  font-weight: 700;
+  color: var(--forest);
+  line-height: 1;
+}
+
+.coverage-arc .score-unit {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 400;
+  margin-top: 2px;
+}
+
+.coverage-details h2 {
+  font-family: 'Sora', sans-serif;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--forest);
+  margin-bottom: 8px;
+}
+
+.coverage-stat {
+  font-size: 14px;
+  color: var(--text-dim);
+  line-height: 1.8;
+}
+
+.coverage-stat .highlight { color: var(--green); font-weight: 600; }
+.coverage-stat .warn { color: var(--amber); font-weight: 500; }
+
+/* Section Headers */
+.section-head { margin-bottom: 16px; }
+
+.section-title {
+  font-family: 'Sora', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--violet);
+  margin-bottom: 4px;
+}
+
+.section-subtitle {
+  font-size: 14px;
+  color: var(--text-dim);
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+/* Metrics Grid */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.metric-card {
+  background: var(--surface);
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.metric-card.gap-card {
+  opacity: 0.5;
+  border-left: 2px solid var(--amber);
+}
+
+.metric-name {
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.metric-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--forest);
+  line-height: 1;
+}
+
+.metric-unit {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.standing-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  display: inline-block;
+  width: fit-content;
+}
+
+.standing-optimal { color: var(--green); background: var(--green-dim); }
+.standing-good { color: var(--violet); background: var(--violet-dim); }
+.standing-average { color: var(--text-dim); background: var(--surface-2); }
+.standing-below { color: var(--amber); background: var(--amber-dim); }
+.standing-concerning { color: var(--coral); background: var(--coral-dim); }
+
+.percentile-bar {
+  height: 4px;
+  background: var(--surface-2);
+  border-radius: 2px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.percentile-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.8s ease;
+}
+
+.percentile-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.tier-label {
+  grid-column: 1 / -1;
+  background: var(--surface-2);
+  padding: 10px 24px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  border-left: 3px solid var(--green);
+}
+
+.tier-label.tier-2 { border-left-color: var(--violet); }
+
+/* Recovery Grid */
+.recovery-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.recovery-metric {
+  background: var(--surface);
+  padding: 24px 28px;
+}
+
+.chart-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dot.green { background: var(--green); }
+.dot.forest { background: var(--forest); }
+.dot.amber { background: var(--amber); }
+.dot.coral { background: var(--coral); }
+.dot.violet { background: var(--violet); }
+
+.kpi-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--forest);
+  line-height: 1;
+}
+
+.kpi-unit {
+  font-size: 13px;
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.kpi-delta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.kpi-delta.good { color: var(--green); }
+.kpi-delta.warn { color: var(--coral); }
+.kpi-delta.neutral { color: var(--text-dim); }
+
+.gauge-bar {
+  height: 5px;
+  background: var(--surface-2);
+  border-radius: 3px;
+  margin-top: 12px;
+  overflow: hidden;
+}
+
+.gauge-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s ease;
+}
+
+/* Insights */
+.insights-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.insight-card {
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 16px 20px;
+  border-left: 3px solid var(--text-muted);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+}
+
+.insight-card.severity-critical { border-left-color: var(--coral); background: var(--coral-dim); }
+.insight-card.severity-warning { border-left-color: var(--amber); background: var(--amber-dim); }
+.insight-card.severity-positive { border-left-color: var(--green); background: var(--green-dim); }
+.insight-card.severity-neutral { border-left-color: var(--text-muted); }
+
+.insight-title {
+  font-family: 'Sora', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--forest);
+  margin-bottom: 4px;
+}
+
+.insight-body {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+/* Habits */
+.habits-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.habit-card {
+  background: var(--surface);
+  padding: 20px 24px;
+}
+
+.habit-name {
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.habit-streak {
+  font-family: 'Sora', sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.habit-meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  line-height: 1.6;
+}
+
+/* Animations */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.reveal { opacity: 0; transform: translateY(16px); }
+.reveal.visible { animation: fadeUp 0.6s ease forwards; }
+.reveal.visible.delay-1 { animation-delay: 0.08s; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  body { padding: 20px; }
+  .coverage-hero { grid-template-columns: 1fr; justify-items: center; text-align: center; gap: 20px; }
+  .metrics-grid { grid-template-columns: 1fr 1fr; }
+  .recovery-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .metrics-grid { grid-template-columns: 1fr; }
+  .habits-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="section">
+  <div class="header reveal">
+    <h1>Health Engine</h1>
+    <span class="tag">Open Source</span>
+  </div>
+  <div class="subheader reveal delay-1">
+    <span id="date-display"></span> <span style="color: var(--text-muted);">&middot;</span>
+    <span id="freshness-display"></span>
+  </div>
+  <div class="greeting reveal delay-1" id="greeting" style="
+    margin-top: 16px;
+    padding: 16px 20px;
+    background: var(--green-dim);
+    border-left: 3px solid var(--green);
+    border-radius: 0 10px 10px 0;
+    font-size: 15px;
+    color: var(--forest);
+    line-height: 1.6;
+  "></div>
+</div>
+
+<div class="section">
+  <div class="coverage-hero reveal" id="coverage-section">
+    <div class="coverage-arc">
+      <svg viewBox="0 0 150 150" width="150" height="150">
+        <circle cx="75" cy="75" r="65" fill="none" stroke="var(--surface-2)" stroke-width="7" />
+        <circle id="coverage-ring" cx="75" cy="75" r="65" fill="none" stroke="var(--green)" stroke-width="7"
+          stroke-linecap="round" stroke-dasharray="0 410" transform="rotate(-90 75 75)"
+          style="transition: stroke-dasharray 1.2s ease;" />
+      </svg>
+      <div class="score-text">
+        <div class="score-number" id="coverage-score">--</div>
+        <div class="score-unit">coverage</div>
+      </div>
+    </div>
+    <div class="coverage-details">
+      <h2>How much of the picture do you have?</h2>
+      <div class="coverage-stat">
+        <span class="highlight" id="metric-count">--</span> biomarkers across <span class="highlight" id="dimension-count">--</span> scored dimensions<br>
+        Avg percentile: <span class="highlight" id="avg-percentile">--</span><br>
+        <span class="warn" id="gap-display">--</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section-divider"></div>
+
+<div class="section">
+  <div class="section-head reveal">
+    <div class="section-title">Understand</div>
+    <div class="section-subtitle">Where you stand, scored against real CDC population data.</div>
+  </div>
+  <div class="metrics-grid reveal delay-1" id="metrics-grid"></div>
+</div>
+
+<div class="section-divider"></div>
+
+<div class="section">
+  <div class="section-head reveal">
+    <div class="section-title">Monitor</div>
+    <div class="section-subtitle">Is it working? 90-day wearable trends tell the story your snapshot can't.</div>
+  </div>
+  <div class="recovery-grid reveal delay-1" id="recovery-grid">
+    <div class="recovery-metric">
+      <div class="chart-title"><span class="dot forest"></span> Resting Heart Rate</div>
+      <div class="kpi-value" id="rhr-value">-- <span class="kpi-unit">bpm</span></div>
+      <div id="rhr-delta" class="kpi-delta neutral" style="margin-top: 4px;"></div>
+      <svg id="rhr-sparkline" viewBox="0 0 240 50" width="100%" height="50" style="margin-top: 8px;">
+        <line x1="0" y1="25" x2="240" y2="25" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 4" />
+      </svg>
+      <div style="display: flex; justify-content: space-between; margin-top: 2px;">
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--text-muted);">90 days ago</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--text-muted);">today</span>
+      </div>
+    </div>
+    <div class="recovery-metric">
+      <div class="chart-title"><span class="dot green"></span> HRV (RMSSD)</div>
+      <div class="kpi-value" id="hrv-value">-- <span class="kpi-unit">ms</span></div>
+      <div id="hrv-delta" class="kpi-delta neutral" style="margin-top: 4px;"></div>
+      <svg id="hrv-sparkline" viewBox="0 0 240 50" width="100%" height="50" style="margin-top: 8px;">
+        <line x1="0" y1="25" x2="240" y2="25" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 4" />
+      </svg>
+      <div style="display: flex; justify-content: space-between; margin-top: 2px;">
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--text-muted);">90 days ago</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--text-muted);">today</span>
+      </div>
+    </div>
+    <div class="recovery-metric">
+      <div class="chart-title"><span class="dot amber"></span> Sleep Duration</div>
+      <div class="kpi-value" id="sleep-dur-value">-- <span class="kpi-unit">hrs</span></div>
+      <div id="sleep-dur-delta" class="kpi-delta neutral" style="margin-top: 4px;"></div>
+      <div class="gauge-bar">
+        <div class="gauge-fill" id="sleep-dur-gauge" style="width: 0%; background: var(--amber);"></div>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-top: 4px;">
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--text-muted);">4</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--green);">7 target</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--text-muted);">10</span>
+      </div>
+    </div>
+    <div class="recovery-metric">
+      <div class="chart-title"><span class="dot coral"></span> Sleep Regularity</div>
+      <div class="kpi-value" id="sleep-reg-value">-- <span class="kpi-unit">min</span></div>
+      <div id="sleep-reg-delta" class="kpi-delta neutral" style="margin-top: 4px;"></div>
+      <div class="gauge-bar">
+        <div class="gauge-fill" id="sleep-reg-gauge" style="width: 0%; background: var(--coral);"></div>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-top: 4px;">
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--text-muted);">15</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--coral);">60+ concern</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--text-muted);">180</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section-divider"></div>
+
+<div class="section">
+  <div class="section-head reveal">
+    <div class="section-title">Plan</div>
+    <div class="section-subtitle">What needs attention now. Compound effects, not just thresholds.</div>
+  </div>
+  <div class="insights-panel reveal delay-1" id="insights-panel"></div>
+</div>
+
+<div class="section-divider"></div>
+
+<div class="section">
+  <div class="section-head reveal">
+    <div class="section-title">Act</div>
+    <div class="section-subtitle">Knowledge without action is just trivia. Are the habits sticking?</div>
+  </div>
+  <div class="habits-grid reveal delay-1" id="habits-grid"></div>
+</div>
+
+<script>
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+      observer.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+const STANDING_CLASS = {
+  'Optimal': 'standing-optimal', 'Good': 'standing-good', 'Average': 'standing-average',
+  'Below Average': 'standing-below', 'Concerning': 'standing-concerning',
+};
+const STANDING_COLOR = {
+  'Optimal': 'var(--green)', 'Good': 'var(--violet)', 'Average': 'var(--text-dim)',
+  'Below Average': 'var(--amber)', 'Concerning': 'var(--coral)',
+};
+
+function formatDate(s) {
+  return new Date(s+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+function freshness(s) {
+  const h = Math.floor((new Date()-new Date(s))/3600000);
+  if(h<1) return 'just now'; if(h<24) return h+'h ago'; return Math.floor(h/24)+'d ago';
+}
+
+function renderGreeting(b) {
+  const el = document.getElementById('greeting');
+  const parts = [];
+  const w = b.weight;
+  if (w && w.current) {
+    parts.push(`<strong>${w.current} lbs</strong> this morning`);
+    if (w.remaining) parts[0] += ` \u2014 ${w.remaining.toFixed(0)} from target.`;
+  }
+  if (w && w.weekly_rate !== undefined) {
+    if (w.weekly_rate > 0.3) parts.push('Weight\'s moving the wrong direction this week.');
+    else if (w.weekly_rate > -0.2) parts.push('Rate\'s stalled \u2014 let\'s look at why.');
+    else parts.push('Trending in the right direction.');
+  }
+  const g = b.garmin || {};
+  if (g.sleep_duration_avg && g.sleep_duration_avg < 7.0) parts.push(`Sleep at ${g.sleep_duration_avg.toFixed(1)} hours \u2014 that\'s going to show up.`);
+  if (g.hrv_rmssd_avg && g.hrv_rmssd_avg > 60) parts.push('HRV holding strong though.');
+  el.textContent = parts.join(' ');
+  if (!parts.length) el.style.display = 'none';
+}
+
+function renderCoverage(score) {
+  const circ = 2*Math.PI*65, filled = (score.coverage/100)*circ;
+  document.getElementById('coverage-ring').setAttribute('stroke-dasharray',`${filled} ${circ}`);
+  document.getElementById('coverage-score').textContent = score.coverage+'%';
+  document.getElementById('metric-count').textContent = '40+';
+  document.getElementById('dimension-count').textContent = score.results.length+score.gap_count;
+  document.getElementById('avg-percentile').textContent = score.avg_percentile+'th';
+  const g = score.top_gaps[0];
+  document.getElementById('gap-display').textContent = score.gap_count+' things left to measure'+(g?' \u00b7 Easiest next step: '+g.name+' ('+g.cost+')':'');
+}
+
+function renderMetrics(results) {
+  const grid = document.getElementById('metrics-grid');
+  grid.innerHTML = '';
+  const t1=results.filter(r=>r.tier===1), t2=results.filter(r=>r.tier===2);
+  function tierLabel(t,n){const d=document.createElement('div');d.className='tier-label'+(n===2?' tier-2':'');d.textContent=t;grid.appendChild(d);}
+  function card(r){
+    const c=document.createElement('div');c.className='metric-card'+(r.has_data?'':' gap-card');
+    const color=STANDING_COLOR[r.standing]||'var(--text-dim)', cls=STANDING_CLASS[r.standing]||'standing-average';
+    let val='';
+    if(r.has_data&&r.value!==null) val=`<div class="metric-value">${r.value}<span class="metric-unit"> ${r.unit}</span></div>`;
+    else if(r.has_data) val=`<div class="metric-value" style="font-size:16px;color:var(--text-dim);">${r.standing}</div>`;
+    else val=`<div class="metric-value" style="font-size:13px;color:var(--amber);">Not yet measured</div><div style="font-size:12px;color:var(--text-dim);margin-top:2px;">${r.cost_to_close||''}</div>`;
+    let pct='';
+    if(r.percentile_approx!=null) pct=`<div class="percentile-bar"><div class="percentile-fill" style="width:${r.percentile_approx}%;background:${color};"></div></div><div class="percentile-label">${r.percentile_approx}th percentile</div>`;
+    c.innerHTML=`<div class="metric-name">${r.name} <span class="standing-badge ${cls}">${r.standing}</span></div>${val}${pct}`;
+    grid.appendChild(c);
+  }
+  tierLabel('Tier 1 \u2014 High Impact',1); t1.forEach(card);
+  tierLabel('Tier 2 \u2014 Supporting',2); t2.forEach(card);
+}
+
+function drawSparkline(id,data,color){
+  const svg=document.getElementById(id);if(!data.length)return;
+  const vals=data.map(d=>d.v).filter(v=>v!==null);if(!vals.length)return;
+  const min=Math.min(...vals),max=Math.max(...vals),range=max-min||1,w=240,h=50,pad=4;
+  const pts=data.map((d,i)=>{if(d.v===null)return null;return`${(i/(data.length-1))*w},${pad+((max-d.v)/range)*(h-pad*2)}`;}).filter(Boolean);
+  if(pts.length<2)return;
+  const pl=document.createElementNS('http://www.w3.org/2000/svg','polyline');
+  pl.setAttribute('points',pts.join(' '));pl.setAttribute('fill','none');pl.setAttribute('stroke',color);
+  pl.setAttribute('stroke-width','1.5');pl.setAttribute('stroke-linecap','round');pl.setAttribute('stroke-linejoin','round');
+  svg.appendChild(pl);
+  const a=document.createElementNS('http://www.w3.org/2000/svg','polygon');
+  const fx=pts[0].split(',')[0],lx=pts[pts.length-1].split(',')[0];
+  a.setAttribute('points',`${fx},${h} ${pts.join(' ')} ${lx},${h}`);a.setAttribute('fill',color);a.setAttribute('opacity','0.1');
+  svg.appendChild(a);
+  const lp=pts[pts.length-1].split(','),dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  dot.setAttribute('cx',lp[0]);dot.setAttribute('cy',lp[1]);dot.setAttribute('r','3');dot.setAttribute('fill',color);
+  svg.appendChild(dot);
+}
+
+function renderRecovery(g,gd){
+  document.getElementById('rhr-value').innerHTML=`${g.resting_hr} <span class="kpi-unit">bpm</span>`;
+  document.getElementById('hrv-value').innerHTML=`${g.hrv_rmssd_avg} <span class="kpi-unit">ms</span>`;
+  document.getElementById('sleep-dur-value').innerHTML=`${g.sleep_duration_avg} <span class="kpi-unit">hrs</span>`;
+  const dp=Math.max(0,Math.min(100,((g.sleep_duration_avg-4)/6)*100));
+  document.getElementById('sleep-dur-gauge').style.width=dp+'%';
+  document.getElementById('sleep-dur-gauge').style.background=g.sleep_duration_avg>=7?'var(--green)':'var(--amber)';
+  document.getElementById('sleep-dur-delta').textContent=g.sleep_duration_avg>=7?'On target':'Below 7hr target';
+  document.getElementById('sleep-dur-delta').className='kpi-delta '+(g.sleep_duration_avg>=7?'good':'warn');
+  const reg=g.sleep_regularity_stddev;
+  document.getElementById('sleep-reg-value').innerHTML=`\u00b1${Math.round(reg)} <span class="kpi-unit">min</span>`;
+  const rp=Math.max(0,Math.min(100,((reg-15)/165)*100));
+  document.getElementById('sleep-reg-gauge').style.width=rp+'%';
+  document.getElementById('sleep-reg-gauge').style.background=reg<45?'var(--green)':reg<60?'var(--amber)':'var(--coral)';
+  document.getElementById('sleep-reg-delta').textContent=reg<45?'Good regularity':reg<60?'Needs improvement':'Bedtime stdev \u00b7 Concerning';
+  document.getElementById('sleep-reg-delta').className='kpi-delta '+(reg<45?'good':'warn');
+  if(gd&&gd.length){
+    drawSparkline('rhr-sparkline',gd.map(d=>({v:d.rhr})),'var(--forest)');
+    drawSparkline('hrv-sparkline',gd.map(d=>({v:d.hrv})),'var(--green)');
+    const rv=gd.filter(d=>d.rhr).map(d=>d.rhr),hv=gd.filter(d=>d.hrv).map(d=>d.hrv);
+    if(rv.length>14){const e=rv.slice(0,14).reduce((a,b)=>a+b)/14,l=rv.slice(-14).reduce((a,b)=>a+b)/14,d=(l-e).toFixed(1);
+      document.getElementById('rhr-delta').textContent=`90d: ${e.toFixed(0)} \u2192 ${l.toFixed(0)} bpm (${d<0?'\u2193':'\u2191'}${Math.abs(d)})`;
+      document.getElementById('rhr-delta').className='kpi-delta '+(d<=0?'good':'warn');}
+    if(hv.length>14){const e=hv.slice(0,14).reduce((a,b)=>a+b)/14,l=hv.slice(-14).reduce((a,b)=>a+b)/14,d=(l-e).toFixed(1);
+      document.getElementById('hrv-delta').textContent=`90d: ${e.toFixed(0)} \u2192 ${l.toFixed(0)} ms (${d>0?'\u2191':'\u2193'}${Math.abs(d)})`;
+      document.getElementById('hrv-delta').className='kpi-delta '+(d>=0?'good':'warn');}
+  }
+}
+
+function renderInsights(ins){
+  const p=document.getElementById('insights-panel');p.innerHTML='';
+  ins.forEach(i=>{const c=document.createElement('div');c.className=`insight-card severity-${i.severity}`;
+    c.innerHTML=`<div class="insight-title">${i.title}</div><div class="insight-body">${i.body}</div>`;p.appendChild(c);});
+}
+
+function fmtHabit(k){return k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());}
+
+function renderHabits(habits){
+  const g=document.getElementById('habits-grid');g.innerHTML='';
+  Object.entries(habits).sort((a,b)=>b[1].current_streak-a[1].current_streak).forEach(([n,d])=>{
+    const c=document.createElement('div');c.className='habit-card';
+    const sc=d.current_streak>0?'var(--green)':'var(--text-muted)',rc=d.completion_rate>50?'var(--green)':d.completion_rate>20?'var(--amber)':'var(--text-muted)';
+    c.innerHTML=`<div class="habit-name">${fmtHabit(n)}</div><div class="habit-streak" style="color:${sc};">${d.current_streak}</div><div class="habit-meta">day streak<br><span style="color:${rc};">${d.completion_rate}%</span> completion \u00b7 best: ${d.longest_streak}d</div>`;
+    g.appendChild(c);});
+}
+
+async function init(){
+  try{
+    const[br,gr]=await Promise.all([fetch('../data/briefing.json'),fetch('../data/garmin_daily.json')]);
+    const b=await br.json(),gd=await gr.json();
+    document.getElementById('date-display').textContent=formatDate(b.as_of);
+    if(b.garmin&&b.garmin.last_updated) document.getElementById('freshness-display').textContent='Garmin '+freshness(b.garmin.last_updated);
+    renderGreeting(b);
+    renderCoverage(b.score);renderMetrics(b.score.results);renderRecovery(b.garmin,gd);renderInsights(b.insights);renderHabits(b.habits);
+  }catch(e){document.body.innerHTML+=`<div style="color:var(--coral);padding:40px;font-family:monospace;">Error: ${e.message}</div>`;}
+}
+init();
+</script>
+</body>
+</html>

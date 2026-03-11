@@ -15,7 +15,7 @@ from engine.models import Demographics, UserProfile
 from engine.scoring.engine import score_profile
 from engine.insights.engine import generate_insights, load_rules
 from engine.insights.coaching import assess_sleep_debt, assess_deficit_impact, assess_taper_readiness
-from engine.insights.patterns import detect_patterns
+from engine.insights.patterns import detect_patterns, summarize_patterns
 from engine.tracking.weight import rolling_average, weekly_rate, projected_date, rate_assessment
 from engine.tracking.nutrition import remaining_to_hit, daily_totals, protein_check
 from engine.tracking.strength import est_1rm, progression_summary
@@ -199,6 +199,9 @@ def build_briefing(config: dict) -> dict:
         {"severity": i.severity, "category": i.category, "title": i.title, "body": i.body}
         for i in all_insights
     ]
+
+    # Structured pattern summaries for dashboard
+    briefing["patterns"] = summarize_patterns(profile, garmin=wearable)
 
     # --- Weight ---
     if weights_data and len(weights_data) >= 2:
