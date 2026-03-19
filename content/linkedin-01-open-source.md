@@ -1,36 +1,46 @@
 # LinkedIn Post #1: Open Sourcing health-engine
 
-**Status:** Draft (pending Paul review)
-**Target:** First standalone LinkedIn post. Follows Feb 27 Paul reply comment.
+**Status:** Ready to post (aligned with Claw platform voice)
+**Target:** First standalone LinkedIn post.
 
 ---
 
-Been building a health scoring engine on the side for the past year. Started as a personal project during a cut. Ended up going way deeper than I expected.
+Got labs back. Now what?
 
-This morning I asked it how I'm doing. It pulled my Garmin data, lab results, weight trend, and habit log, scored everything against CDC population data, and coached me forward. My RHR has dropped from 57 to 50 over 90 days. HRV trending up. Zone 2 cardio strong at 164 min/week. Cardiovascular fitness is improving even in a caloric deficit. Those are real wins.
+That's the question most health tools skip. They show you numbers. They don't tell you what's missing, what it means in context, or what to do next.
 
-Then it told me what's dragging the picture down. Sleep. 6.5 hours average, 107 minutes of bedtime variance. That regularity number puts me around the 10th percentile. I built a 10-habit sleep checklist. The data shows almost none of them are sticking. AM sunlight has a 3-day streak. Everything else is at zero.
+I built a health scoring engine that does. Today I'm open sourcing it.
 
-That's the part most health tools skip. Not just "here are your numbers" but "here's the compound effect, here's what's not working, and here's the one thing to fix today." Recovery, habits, and biomarkers in one picture.
+It tracks 40+ biomarkers across 20 scored dimensions. Every value benchmarked against real CDC population data, not arbitrary app ranges. It tells you where you stand, what you haven't measured yet, and what it costs to close each gap. Going from 0% to 90% coverage costs under $300 and about an hour of your time.
 
-The engine tracks 40+ biomarkers across 20 scored dimensions. Labs, wearables, vitals, self-report. All benchmarked against real NHANES population percentiles, not arbitrary app ranges. It tells you where you stand, what you're missing, and what it costs to close each gap.
+The part that surprised me: most people are flying blind on the metrics that matter most. Your glucose looks "normal" while insulin has been compensating for a decade. Your LDL is "fine" but you've never tested ApoB or Lp(a). 96 million Americans are prediabetic. Half don't know it. "Average" on a US health app means typical for a population where most people have never had a complete picture.
 
-Today I'm open sourcing it: github.com/a-deal/health-engine
+The engine works with Claude Code out of the box. Clone it, point it at your data, say "how am I doing?" and it coaches you forward from your actual numbers. No dashboard to check. You talk to it.
 
-The timing matters. I've been working with Paul Mederos, who's building Kasane (kasanelife.com), a health coaching app grounded in the same belief: structured health data is what makes coaching personal, not generic advice. Our work kept converging on the same problem from different directions. Open sourcing the scoring layer felt right. This should be shared infrastructure, not locked inside one product.
+This started as a personal project to get a real read on my own health picture. It turned into something bigger when I realized the same gap exists everywhere. People paste their labs into ChatGPT and get one-off answers with no continuity. 38% of Americans delay or skip care because of cost. The infrastructure for owning your health data just doesn't exist yet.
 
-The repo works out of the box with Claude Code. Clone it, point it at your data, say "how am I doing?" and it coaches you from your actual numbers. No dashboard to check. You just talk to it.
+Structured health data is the missing layer that makes health coaching personal instead of generic. I've been working with @Paul Mederos, who's been thinking about the same problem from the product side. There's a natural convergence happening. Open sourcing the scoring engine felt like the right first step. This should be shared infrastructure, not locked inside one product.
 
-If you're building in health, or just want a clear read on where you stand, it's yours.
+Your health story should be owned by you.
+
+Link in comments.
+
+Want help getting it set up? DM me.
 
 ---
 
-## Notes
+## Posting Notes
 
-- Hook: sleep/recovery/habits story from this morning's actual check-in (not the insulin story)
-- "40+ biomarkers across 20 scored dimensions" matches README language exactly
-- Links to README "Why This Exists" section (same framing: what you're missing, coverage score, NHANES)
-- Paul/Kasane mention is genuine, not promotional. Names the convergence.
-- CTA is soft. "It's yours."
-- Reads naturally after the Feb 27 Paul reply (ecosystem framing).
-- No em dashes, no heavy quotes, no emojis.
+- Hook: "Got labs back. Now what?" — plain language, Paul's context-first framing
+- No URLs in post body (LinkedIn deprioritizes posts with links)
+- Drop repo link as first comment immediately after posting
+- @-mention Paul Mederos only (not Kasane — that's his territory to announce)
+- "health picture" and "own health story" — Claw platform language
+- "missing layer" framing from Paul's brief (health engine as infrastructure)
+- "natural convergence" — alludes to partnership without naming the product
+- Equity angle woven in: 38% delaying care, ChatGPT paste problem, infrastructure gap
+- "Your health story should be owned by you" — echoes Claw platform tagline
+- No fitness/body recomp language
+- Soft CTA: "DM me" for help setting up
+- Demo video attached to post (record with dashboard visible)
+- No em dashes in body (used in this notes section only), no heavy quotes, no emojis

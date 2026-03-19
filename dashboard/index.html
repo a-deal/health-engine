@@ -866,6 +866,7 @@ body::after {
   <div class="nav-inner">
     <span class="nav-brand">Health Engine</span>
     <div class="nav-right">
+      <a href="body-comp.html" style="color:var(--text-secondary);text-decoration:none;padding:4px 10px;border:1px solid rgba(255,255,255,0.08);border-radius:6px;transition:all 0.2s" onmouseover="this.style.borderColor='rgba(255,255,255,0.2)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.08)';this.style.color='var(--text-secondary)'">Body Comp &rarr;</a>
       <span id="nav-date"></span>
       <span id="nav-fresh"></span>
     </div>
@@ -1261,12 +1262,12 @@ function rRecovery(b, daily) {
     }
     if (g.sleep_duration_avg != null) { count++;
       const pct = Math.max(0,Math.min(100,((g.sleep_duration_avg-4)/6)*100));
-      const col = g.sleep_duration_avg>=7?'var(--accent)':'var(--amber)';
+      const col = g.sleep_duration_avg>=7?'var(--accent)':g.sleep_duration_avg>=6?'var(--amber)':'var(--red)';
       h += `<div class="dcard"><div class="dcard-label"><span class="dcard-dot dot-amber"></span>Sleep Duration</div>
         <div class="dcard-big">${g.sleep_duration_avg}<span class="unit"> hrs</span></div>
-        <div class="dcard-note ${g.sleep_duration_avg>=7?'good':'warn'}">${g.sleep_duration_avg>=7?'On target':'Below 7hr target'}</div>
-        <div class="gauge"><div class="gauge-bar" style="width:${pct}%;background:${col}"></div></div>
-        <div class="gauge-ends"><span>4</span><span class="tgt">7 target</span><span>10</span></div>
+        <div class="dcard-note" id="sleep-trend">${g.sleep_duration_avg>=7?'On target':'Below 7hr target'}</div>
+        <div class="dcard-spark" id="sleep-spark"></div>
+        <div class="dcard-axis"><span>90d ago</span><span>today</span></div>
       </div>`;
     }
     if (g.sleep_regularity_stddev != null) { count++;
@@ -1307,6 +1308,8 @@ function rRecovery(b, daily) {
   if (has && daily?.length) {
     spark(document.getElementById('rhr-spark'), daily.map(d=>d.rhr), 'var(--blue)');
     spark(document.getElementById('hrv-spark'), daily.map(d=>d.hrv), 'var(--accent)');
+    const sleepCol = g.sleep_duration_avg>=7?'var(--accent)':g.sleep_duration_avg>=6?'var(--amber)':'var(--red)';
+    spark(document.getElementById('sleep-spark'), daily.map(d=>d.sleep_hrs), sleepCol);
     function trend(vals, id, unit, invert) {
       if (vals.length <= 14) return;
       const e = vals.slice(0,14).reduce((a,b)=>a+b)/14;
@@ -1319,6 +1322,25 @@ function rRecovery(b, daily) {
     }
     trend(daily.filter(d=>d.rhr).map(d=>d.rhr),'rhr-trend','bpm',true);
     trend(daily.filter(d=>d.hrv).map(d=>d.hrv),'hrv-trend','ms',false);
+    trend(daily.filter(d=>d.sleep_hrs).map(d=>d.sleep_hrs),'sleep-trend','hrs',false);
+  }
+
+  // Sleep-deficit coaching signal — render prominently if present
+  const signals = b.coaching_signals || [];
+  const sleepDeficit = signals.find(s => s.category === 'sleep_deficit');
+  if (sleepDeficit) {
+    const sevClass = sleepDeficit.severity === 'critical' ? 'danger' : 'warn';
+    const sevColor = sleepDeficit.severity === 'critical' ? 'var(--red)' : 'var(--amber)';
+    const sigEl = document.createElement('div');
+    sigEl.className = 'sleep-deficit-signal';
+    sigEl.innerHTML = `<div style="margin-top:16px;padding:16px 20px;background:${sleepDeficit.severity==='critical'?'var(--red-dim)':'var(--amber-dim)'};border:1px solid ${sevColor};border-radius:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span class="sev-tag ${sleepDeficit.severity==='critical'?'critical':'warning'}">${sleepDeficit.severity}</span>
+        <span style="font-family:var(--font-display);font-weight:600;font-size:1rem;color:${sevColor}">${sleepDeficit.title}</span>
+      </div>
+      <div style="font-size:0.85rem;color:var(--text-secondary);line-height:1.5">${sleepDeficit.body}</div>
+    </div>`;
+    el.appendChild(sigEl);
   }
 }
 
