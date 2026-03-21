@@ -44,7 +44,16 @@ class GarminClient:
     ):
         self.email = email or os.environ.get("GARMIN_EMAIL")
         self.password = password or os.environ.get("GARMIN_PASSWORD")
-        self.token_dir = Path(os.path.expanduser(token_dir or "~/.config/health-engine/garmin-tokens"))
+        if token_dir:
+            self.token_dir = Path(os.path.expanduser(token_dir))
+        else:
+            # Check gateway token path first, fall back to legacy CLI path
+            gateway_path = Path(os.path.expanduser("~/.config/health-engine/tokens/garmin/default"))
+            legacy_path = Path(os.path.expanduser("~/.config/health-engine/garmin-tokens"))
+            if gateway_path.exists() and any(gateway_path.iterdir()):
+                self.token_dir = gateway_path
+            else:
+                self.token_dir = legacy_path
         self.exercise_map = exercise_map or DEFAULT_EXERCISE_MAP
         self.data_dir = Path(data_dir or "./data")
         self._client = None
@@ -71,9 +80,15 @@ class GarminClient:
     @classmethod
     def has_tokens(cls, token_dir: str | None = None) -> bool:
         """Check if cached garth token files exist."""
-        td = Path(token_dir or os.path.expanduser("~/.config/health-engine/garmin-tokens"))
-        # garth stores oauth1_token.json and oauth2_token.json
-        return td.exists() and any(td.iterdir())
+        if token_dir:
+            td = Path(token_dir)
+            return td.exists() and any(td.iterdir())
+        # Check gateway path first, then legacy
+        gateway = Path(os.path.expanduser("~/.config/health-engine/tokens/garmin/default"))
+        if gateway.exists() and any(gateway.iterdir()):
+            return True
+        legacy = Path(os.path.expanduser("~/.config/health-engine/garmin-tokens"))
+        return legacy.exists() and any(legacy.iterdir())
 
     @classmethod
     def auth_interactive(cls, token_dir: str | None = None) -> bool:
@@ -315,6 +330,74 @@ class GarminClient:
         except Exception as e:
             print(f"  Zone 2: error ({e})")
             return None
+
+    def pull_today(self) -> dict:
+        """Pull current-day intraday data from Garmin Connect.
+
+        Returns a snapshot of today's data so far: steps, calories,
+        body battery, stress, and heart rate. Updates every Garmin sync (~15 min).
+        """
+        today = date.today().isoformat()
+        result = {"date": today}
+
+        try:
+            stats = self.client.get_stats(today)
+            if stats:
+                result["steps"] = stats.get("totalSteps") or 0
+                result["calories_total"] = stats.get("totalKilocalories") or 0
+                result["calories_active"] = (
+                    stats.get("activeKilocalories")
+                    or stats.get("wellnessActiveKilocalories")
+                    or 0
+                )
+                result["calories_bmr"] = stats.get("bmrKilocalories") or 0
+        except Exception as e:
+            print(f"  Today stats error: {e}", file=sys.stderr)
+
+        try:
+            bb = self.client.get_body_battery(today)
+            if bb and isinstance(bb, list) and len(bb) > 0:
+                # Body battery is a list of readings; take the latest
+                latest = bb[-1]
+                result["body_battery"] = latest.get("charged") if isinstance(latest, dict) else None
+            elif bb and isinstance(bb, dict):
+                charged = bb.get("charged")
+                if charged is not None:
+                    result["body_battery"] = charged
+        except Exception as e:
+            print(f"  Body battery error: {e}", file=sys.stderr)
+
+        try:
+            stress = self.client.get_stress_data(today)
+            if stress and isinstance(stress, dict):
+                result["stress_avg"] = stress.get("overallStressLevel") or stress.get("avgStressLevel")
+            elif stress and isinstance(stress, list) and len(stress) > 0:
+                vals = [s.get("stressLevel", 0) for s in stress if isinstance(s, dict) and s.get("stressLevel", 0) > 0]
+                if vals:
+                    result["stress_avg"] = round(statistics.mean(vals))
+        except Exception as e:
+            print(f"  Stress error: {e}", file=sys.stderr)
+
+        try:
+            hr = self.client.get_heart_rates(today)
+            if hr and isinstance(hr, dict):
+                entries = hr.get("heartRateValues") or []
+                # heartRateValues is list of [timestamp_ms, hr_value]
+                valid = [v[1] for v in entries if isinstance(v, (list, tuple)) and len(v) >= 2 and v[1] and v[1] > 0]
+                if valid:
+                    result["last_hr"] = valid[-1]
+                result["resting_hr"] = hr.get("restingHeartRate")
+        except Exception as e:
+            print(f"  Heart rate error: {e}", file=sys.stderr)
+
+        # Save snapshot
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        out_path = self.data_dir / "garmin_today.json"
+        result["last_updated"] = datetime.now().isoformat(timespec="seconds")
+        with open(out_path, "w") as f:
+            json.dump(result, f, indent=2)
+
+        return result
 
     def pull_daily_series(self, days=90) -> list[dict]:
         """Pull daily RHR + HRV + sleep time series for trend analysis."""

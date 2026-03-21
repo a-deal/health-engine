@@ -463,7 +463,25 @@ def register_tools(mcp: FastMCP):
                 day_result = {"meals": [], "totals": totals}
 
             # Add Garmin burn data and compute surplus/deficit
+            # For today, pull live data from Garmin instead of stale JSON
             burn = burn_by_date.get(d)
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            if d == today_str:
+                try:
+                    from engine.integrations.garmin import GarminClient
+                    gc_config = _load_config(user_id)
+                    gc = GarminClient.from_config(gc_config)
+                    gc.data_dir = data_dir
+                    live = gc.pull_today()
+                    if live.get("calories_total") and live["calories_total"] > 0:
+                        burn = {
+                            "total": live["calories_total"],
+                            "active": live.get("calories_active"),
+                            "bmr": live.get("calories_bmr"),
+                        }
+                except Exception:
+                    pass  # Fall back to cached burn data
+
             if burn and burn.get("total"):
                 day_result["garmin_burn"] = {
                     "total": burn["total"],
@@ -852,6 +870,63 @@ def register_tools(mcp: FastMCP):
             "service": service,
             "user_id": user_id,
             "instructions": f"Send this link to the user. They tap it, sign in to {service.title()}, and tokens are cached automatically.",
+        }
+
+    @mcp.tool()
+    def get_daily_snapshot(user_id: str | None = None) -> dict:
+        """Get a live snapshot of today's wearable data (steps, calories burned, body battery,
+        stress, heart rate) alongside today's meals and calorie balance.
+        Pulls fresh data from Garmin on each call (~15s). Use when the user asks
+        'how's my day going', 'what's my burn so far', or 'how much can I still eat'."""
+        from engine.tracking.nutrition import daily_totals, remaining_to_hit
+
+        data_dir = _data_dir(user_id)
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        # Pull fresh Garmin intraday data
+        garmin_snapshot = {}
+        try:
+            config = _load_config(user_id)
+            from engine.integrations.garmin import GarminClient
+            gc = GarminClient.from_config(config)
+            gc.data_dir = data_dir
+            garmin_snapshot = gc.pull_today()
+        except Exception as e:
+            garmin_snapshot = {"error": str(e)}
+
+        # Get today's meals
+        path = data_dir / "meal_log.csv"
+        rows = read_csv(path)
+        day_meals = [r for r in rows if r.get("date") == today]
+        totals = daily_totals(day_meals) if day_meals else {"protein_g": 0, "calories": 0}
+
+        # Remaining macros
+        remaining = None
+        config = _load_config(user_id)
+        targets = config.get("targets", {})
+        if targets and day_meals:
+            cal_target = targets.get("calories_training", targets.get("calories_rest"))
+            protein_target = targets.get("protein_g")
+            if cal_target and protein_target:
+                remaining = remaining_to_hit(day_meals, {"calories": cal_target, "protein_g": protein_target})
+
+        # Calorie balance
+        calorie_balance = None
+        burn = garmin_snapshot.get("calories_total")
+        if burn and burn > 0:
+            intake = float(totals.get("calories", 0) or 0)
+            calorie_balance = {
+                "intake": intake,
+                "burn": burn,
+                "surplus_deficit": round(intake - burn),
+                "status": "surplus" if intake > burn else "deficit",
+            }
+
+        return {
+            "date": today,
+            "garmin": garmin_snapshot,
+            "meals": {"items": day_meals, "totals": totals, "remaining": remaining},
+            "calorie_balance": calorie_balance,
         }
 
     @mcp.tool()
