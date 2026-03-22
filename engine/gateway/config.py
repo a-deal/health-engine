@@ -11,7 +11,9 @@ from pathlib import Path
 import yaml
 
 
-_CONFIG_PATH = Path(os.path.expanduser("~/.config/health-engine/gateway.yaml"))
+_CONFIG_PATH = Path(
+    os.environ.get("HE_CONFIG_DIR", os.path.expanduser("~/.config/health-engine"))
+) / "gateway.yaml"
 
 
 @dataclass

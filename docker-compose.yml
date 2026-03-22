@@ -1,0 +1,21 @@
+services:
+  gateway:
+    build: .
+    container_name: health-engine-gateway
+    ports:
+      - "18800:18800"
+    volumes:
+      - ./data:/app/data
+      - ${HE_CONFIG_DIR:-${HOME}/.config/health-engine}/gateway.yaml:/app/config/gateway.yaml:ro
+      - ./config.yaml:/app/config.yaml:ro
+    environment:
+      - HE_CONFIG_DIR=/app/config
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
