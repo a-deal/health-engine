@@ -19,6 +19,8 @@ class GatewayConfig:
     port: int = 18800
     tunnel_domain: str = ""
     hmac_secret: str = ""
+    api_token: str = ""
+    sessions_dir: str = ""
     # Future: OAuth client credentials for Oura, Whoop
     oura: dict = field(default_factory=dict)
     whoop: dict = field(default_factory=dict)
@@ -42,6 +44,8 @@ def load_gateway_config(path: str | Path | None = None) -> GatewayConfig:
         port=raw.get("port", 18800),
         tunnel_domain=raw.get("tunnel_domain", ""),
         hmac_secret=raw.get("hmac_secret", ""),
+        api_token=raw.get("api_token", ""),
+        sessions_dir=raw.get("sessions_dir", ""),
         oura=raw.get("oura", {}),
         whoop=raw.get("whoop", {}),
     )

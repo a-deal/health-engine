@@ -32,8 +32,20 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
     if config is None:
         config = load_gateway_config()
 
-    app = FastAPI(title="Health Engine Auth Gateway", docs_url=None, redoc_url=None)
+    app = FastAPI(title="Health Engine Gateway", docs_url=None, redoc_url=None)
     token_store = TokenStore()
+
+    # --- Health-engine tool API + transcript viewer ---
+    from .api import api_handler, api_list_tools
+    from .transcripts import transcripts_api, transcripts_html
+
+    # Explicit routes MUST come before the {tool_name} wildcard
+    app.get("/api/tools")(api_list_tools)
+    app.get("/api/transcripts")(transcripts_api)
+    app.get("/transcripts")(transcripts_html)
+    # Wildcard tool dispatch
+    app.get("/api/{tool_name}")(api_handler)
+    app.post("/api/{tool_name}")(api_handler)
 
     # Use config secret or generate ephemeral one
     _hmac_secret = config.hmac_secret or secrets.token_hex(32)
