@@ -127,6 +127,27 @@ Config: `config.yaml` (gitignored). Data: `data/` (gitignored). Thresholds: `eng
 - Use `python3` not `python`
 - Run tests after code changes: `python3 -m pytest tests/ -v`
 
+## Engineering Standards
+
+Every feature ships with:
+- Tests (unit + integration where applicable)
+- Audit logging (every API call logged with user_id, params, latency)
+- Error messages that tell the user what to do, not what went wrong internally
+- Security review: no plaintext secrets, HMAC-signed links, encrypted tokens at rest
+
+Before shipping:
+- Run `python3 -m pytest tests/ -v` — all tests pass
+- Smoke test the actual flow end-to-end (not just unit tests)
+- Check latency: tool calls should complete in <2s for reads, <5s for writes/pulls
+- Review for OWASP top 10 (injection, XSS, broken auth, etc.)
+
+When adding integrations:
+- Research best practices first. Don't operate in a vacuum.
+- Use OAuth 2.0 Authorization Code + PKCE (RFC 9700) for third-party services
+- Store tokens encrypted at rest (Fernet/AES)
+- Rate limit auth endpoints
+- Use the narrowest OAuth scope that works
+
 ## Explaining the Methodology
 
 When a user asks "why do you measure this?" or "how does scoring work?", read the `health-engine://methodology` MCP resource (or reference `docs/METHODOLOGY.md` directly). It explains the reasoning behind every scoring decision in plain language. Key points to convey:

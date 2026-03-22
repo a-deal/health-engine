@@ -9,19 +9,40 @@ Routes:
   GET  /health        — JSON health check for monitoring
   GET  /auth/garmin   — credential form (requires ?user=<user_id>&state=<hmac>)
   POST /auth/garmin/submit — processes credentials, caches tokens
+  GET  /auth/google   — initiates Google OAuth with PKCE
+  GET  /auth/google/callback — handles OAuth redirect, stores encrypted tokens
 """
 
+import base64
 import hashlib
 import hmac
 import json
 import os
 import secrets
 import time
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlencode
 
 from .config import GatewayConfig, load_gateway_config
 from .token_store import TokenStore
+
+
+# --- Rate limiting (in-memory) ---
+
+_rate_limits: dict[str, list[float]] = defaultdict(list)
+
+
+def _check_rate_limit(key: str, max_requests: int, window_seconds: int) -> bool:
+    """Return True if the request is allowed, False if rate-limited."""
+    now = time.time()
+    cutoff = now - window_seconds
+    _rate_limits[key] = [t for t in _rate_limits[key] if t > cutoff]
+    if len(_rate_limits[key]) >= max_requests:
+        return False
+    _rate_limits[key].append(now)
+    return True
 
 
 def create_app(config: GatewayConfig | None = None) -> "FastAPI":
@@ -133,6 +154,148 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
 
         result = _do_garmin_auth(email, password, token_store, verified[0])
         return JSONResponse(result)
+
+    # --- Google Calendar OAuth (Authorization Code + PKCE) ---
+
+    # Pending PKCE flows: state -> {code_verifier, user_id, created_at}
+    _pending_google_flows: dict[str, dict] = {}
+    _FLOW_TTL = 600  # 10 minutes
+
+    def _cleanup_expired_flows():
+        now = time.time()
+        expired = [k for k, v in _pending_google_flows.items() if now - v["created_at"] > _FLOW_TTL]
+        for k in expired:
+            del _pending_google_flows[k]
+
+    def _load_google_client_config() -> dict | None:
+        """Load Google OAuth client_id and client_secret from the secrets file."""
+        path = config.google_client_secrets_path
+        if not path:
+            return None
+        p = Path(path).expanduser()
+        if not p.exists():
+            return None
+        with open(p) as f:
+            data = json.load(f)
+        # Google exports as {"web": {...}} or {"installed": {...}}
+        for key in ("web", "installed"):
+            if key in data:
+                return data[key]
+        return data
+
+    @app.get("/auth/google", response_class=HTMLResponse)
+    async def google_auth_start(request: Request, user: str = Query(...), state: str = Query(...)):
+        """Initiate Google OAuth with PKCE. Redirects to Google consent screen."""
+        # Rate limit: 5/min per IP, 3/hour per user
+        client_ip = request.client.host if request.client else "unknown"
+        if not _check_rate_limit(f"google_ip:{client_ip}", 5, 60):
+            return HTMLResponse(_error_page("Too many requests. Try again in a minute."), status_code=429)
+        if not _check_rate_limit(f"google_user:{user}", 3, 3600):
+            return HTMLResponse(_error_page("Too many connection attempts. Try again later."), status_code=429)
+
+        # Verify HMAC state
+        verified = _verify_state(state)
+        if verified is None:
+            return HTMLResponse(_error_page("Invalid or expired link. Ask your coach for a new one."), status_code=403)
+
+        user_id, service = verified
+        if service != "google-calendar" or user_id != user:
+            return HTMLResponse(_error_page("Invalid link parameters."), status_code=403)
+
+        # Load Google client config
+        client_config = _load_google_client_config()
+        if not client_config:
+            return HTMLResponse(_error_page("Google Calendar is not configured. Contact your admin."), status_code=500)
+
+        # Generate PKCE code_verifier + code_challenge (RFC 7636 / 9700)
+        code_verifier = secrets.token_urlsafe(64)
+        code_challenge = base64.urlsafe_b64encode(
+            hashlib.sha256(code_verifier.encode()).digest()
+        ).rstrip(b"=").decode()
+
+        # Store pending flow (server-side, never exposed to browser)
+        _cleanup_expired_flows()
+        _pending_google_flows[state] = {
+            "code_verifier": code_verifier,
+            "user_id": user_id,
+            "created_at": time.time(),
+        }
+
+        # Build Google OAuth URL
+        redirect_uri = f"{config.base_url}/auth/google/callback"
+        params = {
+            "client_id": client_config["client_id"],
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": "https://www.googleapis.com/auth/calendar.events",
+            "access_type": "offline",
+            "prompt": "consent",
+            "state": state,
+            "code_challenge": code_challenge,
+            "code_challenge_method": "S256",
+        }
+
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(
+            url=f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}",
+            status_code=302,
+        )
+
+    @app.get("/auth/google/callback", response_class=HTMLResponse)
+    async def google_auth_callback(code: str = Query(None), state: str = Query(None), error: str = Query(None)):
+        """Handle Google OAuth redirect. Exchange code for tokens."""
+        if error:
+            return HTMLResponse(_error_page(f"Google authorization was denied. Ask your coach for a new link."), status_code=403)
+
+        if not code or not state:
+            return HTMLResponse(_error_page("Missing authorization parameters. Ask your coach for a new link."), status_code=400)
+
+        # Look up pending flow
+        flow = _pending_google_flows.pop(state, None)
+        if not flow or time.time() - flow["created_at"] > _FLOW_TTL:
+            return HTMLResponse(_error_page("This link has expired. Ask your coach for a new one."), status_code=403)
+
+        user_id = flow["user_id"]
+        code_verifier = flow["code_verifier"]
+
+        # Load client config
+        client_config = _load_google_client_config()
+        if not client_config:
+            return HTMLResponse(_error_page("Google Calendar is not configured. Contact your admin."), status_code=500)
+
+        # Exchange auth code for tokens
+        redirect_uri = f"{config.base_url}/auth/google/callback"
+        try:
+            import urllib.request
+            token_data = urlencode({
+                "code": code,
+                "client_id": client_config["client_id"],
+                "client_secret": client_config["client_secret"],
+                "redirect_uri": redirect_uri,
+                "grant_type": "authorization_code",
+                "code_verifier": code_verifier,
+            }).encode()
+
+            req = urllib.request.Request(
+                "https://oauth2.googleapis.com/token",
+                data=token_data,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                tokens = json.loads(resp.read())
+        except Exception as e:
+            return HTMLResponse(_error_page("Failed to complete authorization. Ask your coach for a new link."), status_code=500)
+
+        # Save tokens (encrypted via TokenStore)
+        token_store.save_token("google-calendar", user_id, {
+            "access_token": tokens.get("access_token", ""),
+            "refresh_token": tokens.get("refresh_token", ""),
+            "client_id": client_config["client_id"],
+            "client_secret": client_config["client_secret"],
+            "scopes": ["https://www.googleapis.com/auth/calendar.events"],
+        })
+
+        return HTMLResponse(_google_success_page(user_id))
 
     return app
 
@@ -299,6 +462,67 @@ def _garmin_auth_page(user_id: str, state: str) -> str:
     }}
   }});
 </script>
+</body>
+</html>"""
+
+
+def _google_success_page(user_id: str) -> str:
+    """Render the Google Calendar success page."""
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calendar Connected</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+  *, *::before, *::after {{ margin: 0; padding: 0; box-sizing: border-box; }}
+  body {{
+    font-family: 'DM Sans', sans-serif;
+    background: #09090b; color: #fafafa;
+    min-height: 100vh; display: flex;
+    align-items: center; justify-content: center;
+    padding: 20px;
+  }}
+  .card {{
+    background: #111113; border: 1px solid #27272a;
+    border-radius: 16px; padding: 36px;
+    width: 100%; max-width: 400px; text-align: center;
+  }}
+  .check {{
+    width: 64px; height: 64px; margin: 0 auto 20px;
+    background: rgba(34, 197, 94, 0.1);
+    border-radius: 50%; display: flex;
+    align-items: center; justify-content: center;
+  }}
+  .check svg {{ width: 32px; height: 32px; color: #22c55e; }}
+  h1 {{
+    font-size: 1.2rem; font-weight: 600;
+    margin-bottom: 8px; color: #22c55e;
+  }}
+  p {{
+    font-size: 0.85rem; color: #a1a1aa;
+    line-height: 1.6;
+  }}
+  .uid {{
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem; color: #52525b;
+    margin-top: 16px;
+  }}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="check">
+    <svg fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+    </svg>
+  </div>
+  <h1>Calendar Connected</h1>
+  <p>Your Google Calendar is linked. Your coach can now see your schedule and create events for you.</p>
+  <p style="margin-top: 12px;">You can close this page and go back to your coach.</p>
+  <p class="uid">{user_id}</p>
+</div>
 </body>
 </html>"""
 

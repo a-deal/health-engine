@@ -895,6 +895,38 @@ def _connect_wearable(service: str, user_id: str = "default") -> dict:
     }
 
 
+def _connect_google_calendar(user_id: str = "default") -> dict:
+    """Generate a tappable OAuth link for connecting Google Calendar."""
+    from engine.gateway.config import load_gateway_config
+    from engine.gateway.token_store import TokenStore
+
+    gw_config = load_gateway_config()
+    ts = TokenStore()
+
+    if ts.has_token("google-calendar", user_id):
+        return {
+            "already_connected": True,
+            "service": "google-calendar",
+            "user_id": user_id,
+            "hint": "Google Calendar is already connected. Use calendar_list_events to verify.",
+        }
+
+    import hashlib, hmac, time as _time, secrets
+    secret = gw_config.hmac_secret or secrets.token_hex(32)
+    bucket = str(int(_time.time()) // 3600)
+    payload = f"{user_id}:google-calendar:{bucket}"
+    sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+    state = f"{payload}:{sig}"
+    auth_url = f"{gw_config.base_url}/auth/google?user={user_id}&state={state}"
+
+    return {
+        "auth_url": auth_url,
+        "service": "google-calendar",
+        "user_id": user_id,
+        "instructions": "Send this link to the user. They tap it, authorize Google Calendar access, and tokens are saved automatically.",
+    }
+
+
 def _get_daily_snapshot(user_id: str | None = None) -> dict:
     from engine.tracking.nutrition import daily_totals, remaining_to_hit
 
@@ -1388,6 +1420,7 @@ TOOL_REGISTRY = {
     "pull_garmin": _pull_garmin,
     "connect_garmin": _connect_garmin,
     "connect_wearable": _connect_wearable,
+    "connect_google_calendar": _connect_google_calendar,
     "get_daily_snapshot": _get_daily_snapshot,
     "setup_profile": _setup_profile,
     "check_engagement": _check_engagement,
@@ -1526,6 +1559,17 @@ def register_tools(mcp: FastMCP):
             user_id: User identifier for multi-user support
         """
         return _connect_wearable(service, user_id)
+
+    @mcp.tool()
+    def connect_google_calendar(user_id: str = "default") -> dict:
+        """Get a tappable OAuth link for connecting Google Calendar.
+        The user opens this link on their phone, authorizes with Google,
+        and tokens are saved automatically. No credentials touch our server.
+
+        Args:
+            user_id: User identifier for multi-user support
+        """
+        return _connect_google_calendar(user_id)
 
     @mcp.tool()
     def get_daily_snapshot(user_id: str | None = None) -> dict:
