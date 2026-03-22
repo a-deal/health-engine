@@ -26,24 +26,34 @@ _DEFAULT_USERS_YAML = os.path.expanduser("~/.openclaw/workspace/users.yaml")
 
 
 def _load_users_map() -> dict[str, str]:
-    """Load phone→name mapping from users.yaml."""
+    """Load phone→name mapping from users.yaml.
+
+    Handles the OpenClaw users.yaml format:
+      users:
+        "+14152009584":
+          user_id: default
+          name: Andrew
+    """
     path = Path(_DEFAULT_USERS_YAML)
     if not path.exists():
         return {}
     try:
         with open(path) as f:
             data = yaml.safe_load(f) or {}
+        # Handle nested users: key
+        users = data.get("users", data)
         mapping = {}
-        for user_id, info in data.items():
+        for key, info in users.items():
             if isinstance(info, dict):
-                phone = info.get("phone", "")
-                name = info.get("name", user_id)
-                if phone:
-                    # Normalize phone: strip + and spaces
-                    clean = phone.replace("+", "").replace(" ", "").replace("-", "")
-                    mapping[clean] = name
-                    mapping[phone] = name
-                mapping[user_id] = name
+                name = info.get("name", key)
+                # Key itself might be the phone number
+                clean = key.replace("+", "").replace(" ", "").replace("-", "")
+                mapping[clean] = name
+                mapping[key] = name
+                # Also map user_id to name
+                uid = info.get("user_id", "")
+                if uid:
+                    mapping[uid] = name
         return mapping
     except Exception:
         return {}
