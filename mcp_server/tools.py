@@ -1302,6 +1302,72 @@ def _get_labs(user_id: str | None = None) -> dict:
 
 
 # =====================================================================
+# Google Calendar tools
+# =====================================================================
+
+def _calendar_list_events(
+    time_min: str | None = None,
+    time_max: str | None = None,
+    max_results: int = 10,
+    query: str | None = None,
+    user_id: str | None = None,
+) -> dict:
+    """List upcoming calendar events."""
+    from engine.integrations.gcal import GoogleCalendarClient
+
+    client = GoogleCalendarClient(user_id=user_id or "default")
+    events = client.list_events(
+        time_min=time_min,
+        time_max=time_max,
+        max_results=max_results,
+        query=query,
+    )
+    return {"events": events, "count": len(events)}
+
+
+def _calendar_create_event(
+    summary: str,
+    start: str,
+    end: str,
+    description: str | None = None,
+    location: str | None = None,
+    user_id: str | None = None,
+) -> dict:
+    """Create a new calendar event."""
+    from engine.integrations.gcal import GoogleCalendarClient
+
+    client = GoogleCalendarClient(user_id=user_id or "default")
+    event = client.create_event(
+        summary=summary,
+        start=start,
+        end=end,
+        description=description,
+        location=location,
+    )
+    return {"created": True, "event": event}
+
+
+def _calendar_search_events(
+    query: str,
+    time_min: str | None = None,
+    time_max: str | None = None,
+    max_results: int = 10,
+    user_id: str | None = None,
+) -> dict:
+    """Search calendar events by text query."""
+    from engine.integrations.gcal import GoogleCalendarClient
+
+    client = GoogleCalendarClient(user_id=user_id or "default")
+    events = client.search_events(
+        query=query,
+        time_min=time_min,
+        time_max=time_max,
+        max_results=max_results,
+    )
+    return {"events": events, "count": len(events)}
+
+
+# =====================================================================
 # Tool registry for HTTP API access
 # =====================================================================
 
@@ -1329,6 +1395,9 @@ TOOL_REGISTRY = {
     "get_user_profile": _get_user_profile,
     "log_labs": _log_labs,
     "get_labs": _get_labs,
+    "calendar_list_events": _calendar_list_events,
+    "calendar_create_event": _calendar_create_event,
+    "calendar_search_events": _calendar_search_events,
     # Excluded from HTTP: auth_garmin (interactive), open_dashboard (browser),
     # import_apple_health (file path)
 }
@@ -1554,6 +1623,40 @@ def register_tools(mcp: FastMCP):
     def get_labs(user_id: str | None = None) -> dict:
         """Retrieve full lab history — all draws with dates, sources, results, and the computed latest values. Use this to check what labs are on file, compare across draws, and identify gaps."""
         return _get_labs(user_id)
+
+    @mcp.tool()
+    def calendar_list_events(
+        time_min: str | None = None,
+        time_max: str | None = None,
+        max_results: int = 10,
+        query: str | None = None,
+        user_id: str | None = None,
+    ) -> dict:
+        """List upcoming Google Calendar events. Returns events with title, start/end times, location, and description. Defaults to upcoming events from now. Use time_min/time_max (ISO 8601) to filter a date range."""
+        return _calendar_list_events(time_min, time_max, max_results, query, user_id)
+
+    @mcp.tool()
+    def calendar_create_event(
+        summary: str,
+        start: str,
+        end: str,
+        description: str | None = None,
+        location: str | None = None,
+        user_id: str | None = None,
+    ) -> dict:
+        """Create a Google Calendar event. Start/end can be ISO 8601 datetime (e.g. '2026-06-26T09:00:00') for timed events or YYYY-MM-DD for all-day events. Use for lab retests, training blocks, wind-down reminders, etc."""
+        return _calendar_create_event(summary, start, end, description, location, user_id)
+
+    @mcp.tool()
+    def calendar_search_events(
+        query: str,
+        time_min: str | None = None,
+        time_max: str | None = None,
+        max_results: int = 10,
+        user_id: str | None = None,
+    ) -> dict:
+        """Search Google Calendar events by text. Searches event titles, descriptions, locations, and attendees. Use to find specific events like 'lab retest' or 'training'."""
+        return _calendar_search_events(query, time_min, time_max, max_results, user_id)
 
 
 def register_resources(mcp: FastMCP):

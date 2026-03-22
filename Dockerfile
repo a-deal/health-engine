@@ -12,7 +12,7 @@ RUN groupadd --gid 1000 appuser && \
 
 # Install deps first (layer caching — only rebuilds when pyproject.toml changes)
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir ".[gateway,garmin]"
+RUN pip install --no-cache-dir ".[gateway,garmin,calendar]"
 
 # Copy application code
 COPY engine/ engine/

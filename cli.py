@@ -157,6 +157,14 @@ def cmd_auth(args):
             )
         token_dir = garmin_cfg.get("token_dir")
         GarminClient.auth_interactive(token_dir=token_dir)
+    elif args.service == "google-calendar":
+        from engine.integrations.gcal_auth import run_auth_flow
+        if not args.secrets:
+            print("ERROR: --secrets is required for google-calendar auth.")
+            print("Usage: python3 cli.py auth google-calendar --secrets /path/to/client_secret.json")
+            sys.exit(1)
+        user_id = getattr(args, "user", None) or "default"
+        run_auth_flow(args.secrets, user_id=user_id)
 
 
 def cmd_import(args):
@@ -285,8 +293,10 @@ def main():
     p_checkin.set_defaults(func=cmd_checkin)
 
     # auth
-    p_auth = sub.add_parser("auth", help="Authenticate with a wearable service")
-    p_auth.add_argument("service", choices=["garmin"], help="Service to authenticate")
+    p_auth = sub.add_parser("auth", help="Authenticate with a service")
+    p_auth.add_argument("service", choices=["garmin", "google-calendar"], help="Service to authenticate")
+    p_auth.add_argument("--secrets", help="Path to OAuth client_secret.json (required for google-calendar)")
+    p_auth.add_argument("--user", help="User ID for multi-user support (default: 'default')")
     p_auth.set_defaults(func=cmd_auth)
 
     # import

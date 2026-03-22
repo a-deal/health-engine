@@ -123,6 +123,8 @@ class GarminClient:
                     client.display_name = dn
                 else:
                     raise RuntimeError("No display name in cached profile")
+                # Re-dump tokens so any garth auto-refresh is persisted to disk
+                client.garth.dump(str(self.token_dir))
                 print("Authenticated with cached token.")
                 self._client = client
                 return client
