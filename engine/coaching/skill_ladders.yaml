@@ -1,0 +1,244 @@
+## Skill Ladders — ranked habit progressions per goal
+## Each level is a potential 14-day block focus.
+## Levels are ranked by expected impact. Level 1 = highest leverage.
+## The coach diagnoses where the user is and starts at the first unmastered level.
+
+sleep-better:
+  name: Sleep Better
+  outcome: Longer, more consistent sleep. Wake up feeling rested.
+  levels:
+    - habit: Consistent wake time (+/- 15 min, including weekends)
+      why: Circadian anchor. SCN entrainment drives every downstream sleep metric. Sleep regularity predicts mortality independent of duration.
+      diagnostic: "What time do you wake up? Is it the same on weekends?"
+
+    - habit: Evening wind-down routine (consistent pre-sleep sequence, 30-60 min)
+      why: Conditioned relaxation response. Consistent cue trains the body to downshift.
+      diagnostic: "Do you have any kind of routine before bed, or do you just crash?"
+
+    - habit: Sleep environment (temp 65-68F, dark, quiet)
+      why: Thermoregulation drives sleep stage transitions. Light suppresses melatonin. Noise causes micro-arousals.
+      diagnostic: "What's your bedroom like? AC, curtains, any noise?"
+
+    - habit: Caffeine cutoff (none after noon)
+      why: Adenosine half-life 5-6hrs. Afternoon caffeine fragments deep sleep even if you fall asleep fine.
+      diagnostic: "When's your last coffee or energy drink?"
+
+    - habit: Meal timing (last meal 2+ hrs before bed)
+      why: Digestion raises core temp. Sleep onset requires core temp drop.
+      diagnostic: "When do you usually eat your last meal?"
+
+    - habit: AM light exposure (sunlight within 30 min of waking, 10+ min)
+      why: 100K lux resets SCN, anchors circadian phase, sets melatonin onset ~14 hrs later.
+      diagnostic: "Do you get outside in the morning at all?"
+
+    - habit: Screen/blue light management (dim lights, no screens 30-60 min before bed)
+      why: Melanopic lux suppresses melatonin. Screens at 12in deliver enough to delay onset 30+ min.
+      diagnostic: "What are you doing in the last hour before bed? Phone, TV?"
+
+    - habit: Alcohol/substance timing (none within 3 hrs of bed)
+      why: Alcohol fragments REM. THC suppresses REM. Both reduce sleep quality even if duration looks fine.
+      diagnostic: "Do you drink or use anything in the evening?"
+
+less-stress:
+  name: Less Stress
+  outcome: Calmer evenings, less racing thoughts, better recovery.
+  levels:
+    - habit: Daily decompression practice (5-10 min breathing, journaling, or body scan)
+      why: Vagal tone activation. Even 5 min of slow breathing shifts ANS from sympathetic to parasympathetic. Immediate HRV impact.
+      diagnostic: "When things feel stressful, what do you do to come down? Or do you just push through?"
+
+    - habit: Movement as stress relief (any form, 20+ min, most days)
+      why: Exercise is the most robust anxiolytic in the literature. Acute cortisol response followed by enhanced recovery.
+      diagnostic: "Are you moving your body regularly? What does that look like?"
+
+    - habit: Screen/news boundaries (defined cutoff, especially evening)
+      why: Doom scrolling activates threat-detection circuits. Evening screen use correlates with rumination and delayed sleep onset.
+      diagnostic: "How much time do you spend on your phone in the evening? News, social media?"
+
+    - habit: Sleep consistency (consistent bed/wake times)
+      why: Sleep debt amplifies amygdala reactivity 60%. One night of poor sleep measurably worsens emotional regulation.
+      diagnostic: "How's your sleep? Consistent, or all over the place?"
+
+    - habit: Social connection (one meaningful interaction per day)
+      why: Strong relationships confer 50% increased survival. Isolation amplifies stress response.
+      diagnostic: "Who do you talk to regularly? Friends, family, anyone you check in with?"
+
+    - habit: Stimulant audit (caffeine, nicotine, other)
+      why: Caffeine elevates cortisol. Nicotine is anxiolytic short-term, anxiogenic long-term. Both mask stress signals.
+      diagnostic: "What's your caffeine and stimulant intake look like?"
+
+lose-weight:
+  name: Lose Weight
+  outcome: Sustainable fat loss through habits, not crash diets.
+  levels:
+    - habit: Protein awareness (track protein at one meal per day)
+      why: Awareness precedes behavior change. Protein is the most satiating macro. Most people undereat it. One meal is tiny enough to stick.
+      diagnostic: "Do you have any idea how much protein you eat in a day?"
+
+    - habit: Protein target (hit target at every meal)
+      why: Satiety, muscle preservation during deficit, thermic effect. 1.6-2.2g/kg is the range.
+      diagnostic: "Would you be open to tracking your protein for a couple weeks?"
+
+    - habit: Meal consistency (regular timing, reduce grazing/snacking)
+      why: Circadian metabolism. Irregular eating disrupts hunger signaling. Structured meals reduce decision fatigue.
+      diagnostic: "Do you eat at roughly the same times each day, or is it random?"
+
+    - habit: Calorie awareness (rough daily tracking, not obsessive)
+      why: You can't manage what you don't measure. But calories come AFTER protein because protein naturally reduces intake.
+      diagnostic: "Have you ever tracked calories? Even roughly?"
+
+    - habit: Movement baseline (steps, NEAT, any daily activity)
+      why: NEAT is the largest variable component of TDEE for most people. 8K-10K steps is a reasonable floor.
+      diagnostic: "How active are you outside of workouts? Desk job, on your feet?"
+
+    - habit: Training consistency (3+ sessions per week)
+      why: Resistance training preserves lean mass during deficit. Cardio is less important than most people think for fat loss.
+      diagnostic: "Do you train? How many days a week?"
+
+    - habit: Meal prep / environment design (reduce friction for good choices)
+      why: Environment beats willpower. Having food ready eliminates the decision failure point.
+      diagnostic: "Do you cook? Meal prep? Or mostly eating out?"
+
+    - habit: Sleep optimization
+      why: Sleep debt increases ghrelin, decreases leptin, impairs glucose metabolism. Dieting on bad sleep is fighting uphill.
+      diagnostic: "How's your sleep?"
+
+build-strength:
+  name: Build Strength
+  outcome: Consistent training, progressive overload, measurable gains.
+  levels:
+    - habit: Training consistency (3+ sessions per week, any program)
+      why: Consistency beats optimization. The best program you don't follow is worse than a mediocre one you do.
+      diagnostic: "How many days a week are you training right now? Be honest."
+
+    - habit: Training log (record sets, reps, weight every session)
+      why: Can't progressively overload without tracking. Most people think they remember. They don't.
+      diagnostic: "Do you track your workouts? Write down sets and weights?"
+
+    - habit: Progressive overload (add weight, reps, or sets week over week)
+      why: The fundamental driver of adaptation. Without it, you're exercising, not training.
+      diagnostic: "Are you adding weight or reps over time, or doing roughly the same thing?"
+
+    - habit: Protein intake (1.6-2.2g/kg, distributed across meals)
+      why: Muscle protein synthesis requires substrate. Undereating protein caps recovery.
+      diagnostic: "How much protein are you getting? Roughly."
+
+    - habit: Recovery management (sleep, deload weeks, listening to signals)
+      why: Adaptation happens during recovery, not during training. Overtraining is underrecovering.
+      diagnostic: "Do you ever take easy weeks? How do you feel day to day, energy-wise?"
+
+    - habit: Program structure (periodization, exercise selection, volume management)
+      why: Only matters after consistency and tracking are solid. Optimizing a program you skip is pointless.
+      diagnostic: "What program are you running? Or are you winging it?"
+
+more-energy:
+  name: More Energy
+  outcome: Feel alert and energized throughout the day.
+  levels:
+    - habit: Sleep duration and consistency
+      why: Energy is downstream of sleep. Nothing else matters if you're running on 5 hours.
+      diagnostic: "How much sleep are you getting? Same time every night?"
+
+    - habit: Morning movement (10+ min walk, sunlight)
+      why: Cortisol awakening response plus light exposure equals circadian energy signal. Beats coffee for sustained alertness.
+      diagnostic: "What does your morning look like? Do you get moving early?"
+
+    - habit: Hydration baseline (water intake, especially AM)
+      why: Mild dehydration (1-2%) impairs cognitive function and perceived energy. Most people are chronically under-hydrated.
+      diagnostic: "How much water do you drink? Be honest."
+
+    - habit: Caffeine timing (use strategically, not as a crutch)
+      why: Caffeine blocks adenosine but doesn't clear it. Using it to mask sleep debt creates a cycle. Delay first cup 90 min post-wake.
+      diagnostic: "How much caffeine? When's your first cup?"
+
+    - habit: Blood sugar stability (balanced meals, reduce sugar spikes)
+      why: Postprandial glucose crashes cause the afternoon slump. Protein plus fat plus fiber blunts the spike.
+      diagnostic: "Do you crash after lunch? What does a typical lunch look like?"
+
+    - habit: Movement throughout the day (break up sedentary time)
+      why: Sitting for 8+ hours tanks energy regardless of exercise. 5-min movement breaks every hour.
+      diagnostic: "Are you sitting most of the day? How often do you get up?"
+
+sharper-focus:
+  name: Sharper Focus
+  outcome: Better concentration, less brain fog, sustained attention.
+  levels:
+    - habit: Sleep quality
+      why: Prefrontal cortex function degrades linearly with sleep debt. Focus IS sleep.
+      diagnostic: "How's your sleep? Do you wake up sharp or groggy?"
+
+    - habit: Distraction boundaries (phone/notification management during work)
+      why: Context switching costs 23 min to recover. Notifications are the number one focus killer.
+      diagnostic: "When you need to focus, what gets in the way? Phone, notifications?"
+
+    - habit: Morning routine (consistent start, no reactive mode)
+      why: Starting the day in email/social media puts you in reactive mode. Proactive morning equals better sustained focus.
+      diagnostic: "What's the first thing you do when you wake up?"
+
+    - habit: Movement (exercise improves BDNF, executive function)
+      why: Acute exercise improves attention for 2+ hours post-session. Regular exercise improves baseline cognitive function.
+      diagnostic: "Are you exercising? How often?"
+
+    - habit: Nutrition for cognition (omega-3s, blood sugar stability, hydration)
+      why: Brain is 60% fat. Omega-3 deficiency impairs cognition. Blood sugar crashes kill focus.
+      diagnostic: "What does your diet look like? Fish, whole foods, or mostly processed?"
+
+    - habit: Caffeine optimization (strategic use, not constant drip)
+      why: Caffeine improves focus in moderate doses. Chronic high intake builds tolerance and increases anxiety.
+      diagnostic: "How much caffeine are you using? Do you feel dependent on it?"
+
+better-mood:
+  name: Better Mood
+  outcome: More positive outlook, emotional stability, resilience.
+  levels:
+    - habit: Daily outdoor movement (20+ min walk, any pace)
+      why: Exercise is as effective as SSRIs for mild-moderate depression. Outdoor exposure adds light therapy benefit.
+      diagnostic: "How often do you get outside? Do you walk at all?"
+
+    - habit: Social connection (one meaningful interaction per day)
+      why: Loneliness carries mortality risk equivalent to smoking 15 cigarettes per day. Connection is not optional.
+      diagnostic: "Who do you talk to regularly? Do you feel connected to people?"
+
+    - habit: Sleep consistency
+      why: One night of poor sleep increases amygdala reactivity 60%. Sleep debt makes everything feel worse.
+      diagnostic: "How's your sleep?"
+
+    - habit: Purpose/engagement (one thing per day that feels meaningful)
+      why: Self-determination theory. Autonomy, competence, relatedness. Having something to work toward matters.
+      diagnostic: "What's giving you energy right now? Work, hobbies, anything?"
+
+    - habit: Substance audit (alcohol, THC, stimulants)
+      why: Alcohol is a depressant. THC suppresses REM. Both provide short-term relief, long-term cost.
+      diagnostic: "Do you drink or use anything regularly?"
+
+    - habit: Gratitude or reflection practice (1 min, end of day)
+      why: Gratitude journaling has robust evidence for mood improvement. Tiny dose, real effect.
+      diagnostic: "Do you ever take a minute at the end of the day to reflect?"
+
+eat-healthier:
+  name: Eat Healthier
+  outcome: Better food choices without overthinking.
+  levels:
+    - habit: Protein at one meal (usually breakfast)
+      why: Protein is the highest-leverage nutritional habit. Satiating, thermic, muscle-preserving. One meal is tiny enough to start.
+      diagnostic: "What does breakfast look like for you? Or do you skip it?"
+
+    - habit: Whole food additions (add one fruit or vegetable per day)
+      why: Add before subtract removes restriction psychology. Adding a vegetable feels different from stop eating junk.
+      diagnostic: "How many servings of fruits or vegetables do you eat on a typical day?"
+
+    - habit: Hydration (water before/with meals)
+      why: Thirst mimics hunger. Water with meals aids digestion and reduces overconsumption.
+      diagnostic: "How's your water intake?"
+
+    - habit: Meal regularity (roughly same times each day)
+      why: Circadian metabolism. Regular eating windows improve hunger signaling and reduce grazing.
+      diagnostic: "Do you eat at consistent times, or whenever?"
+
+    - habit: Reduce ultra-processed foods (swap one processed item for whole food)
+      why: UPF drives overconsumption (~500 cal/day in controlled studies). But adding good food first naturally displaces bad food.
+      diagnostic: "What snacks or convenience foods are you eating most?"
+
+    - habit: Meal prep basics (cook one meal in advance per week)
+      why: Environment design. Having good food available is the number one predictor of eating good food.
+      diagnostic: "Do you cook at all? Or mostly eating out / ordering in?"

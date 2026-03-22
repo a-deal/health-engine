@@ -1486,6 +1486,50 @@ def _get_api_stats(days: int = 7, user_id: str | None = None) -> dict:
     }
 
 
+def _get_skill_ladder(goal_id: str) -> dict:
+    """Return the ranked skill ladder for a goal.
+
+    Each level has: habit, why (evidence), diagnostic question.
+    The coach uses this to diagnose where the user is and start at the
+    first unmastered level.
+    """
+    ladders_path = PROJECT_ROOT / "engine" / "coaching" / "skill_ladders.yaml"
+    if not ladders_path.exists():
+        return {"error": "skill_ladders.yaml not found"}
+
+    with open(ladders_path) as f:
+        ladders = yaml.safe_load(f)
+
+    if goal_id not in ladders:
+        return {
+            "error": f"Unknown goal: {goal_id}",
+            "available_goals": list(ladders.keys()),
+        }
+
+    ladder = ladders[goal_id]
+    return {
+        "goal_id": goal_id,
+        "name": ladder["name"],
+        "outcome": ladder["outcome"],
+        "levels": [
+            {
+                "level": i + 1,
+                "habit": level["habit"],
+                "why": level["why"],
+                "diagnostic": level["diagnostic"],
+            }
+            for i, level in enumerate(ladder["levels"])
+        ],
+        "total_levels": len(ladder["levels"]),
+        "instructions": (
+            "Start at Level 1. Ask the diagnostic question. If the user already "
+            "has this habit locked in, move to the next level. The first unmastered "
+            "level becomes their 14-day program focus. Use the Arrival Principle: "
+            "lead them to name the habit themselves through questions, don't prescribe it."
+        ),
+    }
+
+
 # =====================================================================
 # Tool registry for HTTP API access
 # =====================================================================
@@ -1519,6 +1563,7 @@ TOOL_REGISTRY = {
     "calendar_create_event": _calendar_create_event,
     "calendar_search_events": _calendar_search_events,
     "get_api_stats": _get_api_stats,
+    "get_skill_ladder": _get_skill_ladder,
     # Excluded from HTTP: auth_garmin (interactive), open_dashboard (browser),
     # import_apple_health (file path)
 }
@@ -1797,6 +1842,11 @@ def register_tools(mcp: FastMCP):
     def get_api_stats(days: int = 7, user_id: str | None = None) -> dict:
         """API latency and error report. Shows p50/p95/max latency per tool, error counts, timeout counts, and flags slow tools (>5s p95). Use for debugging performance issues and monitoring system health."""
         return _get_api_stats(days, user_id)
+
+    @mcp.tool()
+    def get_skill_ladder(goal_id: str) -> dict:
+        """Get the ranked skill ladder for a goal. Returns levels ordered by expected impact, each with a habit, evidence rationale, and diagnostic question. Use during onboarding and program transitions to find the right starting point for a user. Valid goal_ids: sleep-better, less-stress, lose-weight, build-strength, more-energy, sharper-focus, better-mood, eat-healthier."""
+        return _get_skill_ladder(goal_id)
 
 
 def register_resources(mcp: FastMCP):
