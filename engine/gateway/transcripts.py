@@ -50,9 +50,17 @@ def _load_users_map() -> dict[str, str]:
 
 
 def _parse_session_file(path: Path, users_map: dict) -> dict | None:
-    """Parse a single JSONL session file into structured messages."""
+    """Parse an OpenClaw JSONL session file into structured messages.
+
+    OpenClaw format: each line is a JSON object with a "type" field.
+    - type=session: metadata (id, timestamp)
+    - type=message: contains message.role and message.content
+    - type=tool_result, model_change, etc.: skip
+    """
     messages = []
-    session_meta = {}
+    session_id = path.stem
+    session_started = ""
+    user_name = "Unknown"
 
     try:
         with open(path) as f:
@@ -65,21 +73,25 @@ def _parse_session_file(path: Path, users_map: dict) -> dict | None:
                 except json.JSONDecodeError:
                     continue
 
-                # Extract session metadata
-                if "session_id" in entry and not session_meta:
-                    session_meta = {
-                        "id": entry.get("session_id", path.stem),
-                        "started": entry.get("timestamp", ""),
-                    }
-
-                # Extract user/assistant text messages
-                role = entry.get("role", "")
-                content = entry.get("content", "")
+                entry_type = entry.get("type", "")
                 timestamp = entry.get("timestamp", "")
 
-                # Handle different message formats
+                # Session metadata
+                if entry_type == "session":
+                    session_id = entry.get("id", path.stem)
+                    session_started = timestamp
+                    continue
+
+                # Messages
+                if entry_type != "message":
+                    continue
+
+                msg_data = entry.get("message", {})
+                role = msg_data.get("role", "")
+                content = msg_data.get("content", "")
+
+                # Extract text from multipart content
                 if isinstance(content, list):
-                    # Multipart content — extract text parts
                     text_parts = []
                     for part in content:
                         if isinstance(part, dict) and part.get("type") == "text":
@@ -91,14 +103,20 @@ def _parse_session_file(path: Path, users_map: dict) -> dict | None:
                 if not content or not role:
                     continue
 
-                # Skip tool calls/results — just show user/assistant text
-                if role in ("user", "assistant", "human"):
-                    msg = {
+                # Only show user/assistant text, skip system/tool
+                if role in ("user", "assistant"):
+                    # Try to identify user from message content (phone numbers)
+                    if role == "user" and user_name == "Unknown":
+                        for phone, name in users_map.items():
+                            if phone in content:
+                                user_name = name
+                                break
+
+                    messages.append({
                         "timestamp": timestamp,
-                        "role": "user" if role in ("user", "human") else "assistant",
-                        "text": content[:5000],  # Cap very long messages
-                    }
-                    messages.append(msg)
+                        "role": role,
+                        "text": content[:5000],
+                    })
 
     except Exception as e:
         logger.warning(f"Failed to parse {path}: {e}")
@@ -107,23 +125,20 @@ def _parse_session_file(path: Path, users_map: dict) -> dict | None:
     if not messages:
         return None
 
-    # Try to identify user from phone number in filename or first message
-    user_name = "Unknown"
-    stem = path.stem
-    for phone, name in users_map.items():
-        if phone in stem:
-            user_name = name
-            break
+    # Try to identify user from filename
+    if user_name == "Unknown":
+        stem = path.stem
+        for phone, name in users_map.items():
+            if phone in stem:
+                user_name = name
+                break
 
-    if not session_meta:
-        session_meta = {"id": stem, "started": ""}
-
-    # Use file mtime if no timestamp in data
-    if not session_meta.get("started"):
-        session_meta["started"] = datetime.fromtimestamp(path.stat().st_mtime).isoformat()
+    if not session_started:
+        session_started = datetime.fromtimestamp(path.stat().st_mtime).isoformat()
 
     return {
-        **session_meta,
+        "id": session_id,
+        "started": session_started,
         "user": user_name,
         "file": path.name,
         "message_count": len(messages),
@@ -134,7 +149,7 @@ def _parse_session_file(path: Path, users_map: dict) -> dict | None:
 def _get_sessions_dir(config) -> Path:
     """Get sessions directory from config or default."""
     if config.sessions_dir:
-        return Path(config.sessions_dir)
+        return Path(os.path.expanduser(config.sessions_dir))
     return Path(_DEFAULT_SESSIONS_DIR)
 
 
