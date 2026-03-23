@@ -56,6 +56,13 @@ def _audit_log(tool: str, user_id: str, params: dict, result: dict | None,
 # Params that accept complex types (dicts/lists) — auto-parse from JSON strings
 _COMPLEX_PARAMS = {"habits", "results", "supplements", "goals", "conditions"}
 
+# Flat health metric keys that can be passed as query params instead of nested metrics dict
+_HEALTH_METRIC_KEYS = {
+    "resting_hr", "hrv_sdnn", "steps", "sleep_hours",
+    "sleep_start", "sleep_end", "weight_lbs", "vo2_max",
+    "blood_oxygen", "active_calories", "respiratory_rate",
+}
+
 
 def _coerce_params(tool_name: str, params: dict) -> dict:
     """Coerce query string values to match tool function signatures."""
@@ -168,6 +175,24 @@ async def api_handler(tool_name: str, request: Request, token: str = Query(None)
     if body:
         params.update(body)
     params.pop("token", None)
+
+    # For ingest_health_snapshot: collect flat metric params into a metrics dict
+    # so shortcuts can send ?resting_hr=58&steps=8000 instead of metrics={"resting_hr":58,...}
+    if tool_name == "ingest_health_snapshot" and "metrics" not in params:
+        metrics = {}
+        for key in list(params.keys()):
+            if key in _HEALTH_METRIC_KEYS:
+                val = params.pop(key)
+                # Try to convert to float for numeric metrics
+                try:
+                    metrics[key] = float(val)
+                except (ValueError, TypeError):
+                    metrics[key] = val  # Keep as string (e.g. sleep_start/sleep_end)
+        if metrics:
+            params["metrics"] = metrics
+            # Default user_id if not provided (matches shortcut behavior)
+            if "user_id" not in params:
+                params["user_id"] = "default"
 
     # Coerce types to match function signatures
     params = _coerce_params(tool_name, params)

@@ -178,6 +178,39 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
   Use your health coach to get a connection link.</p>
 </div></body></html>"""
 
+    @app.get("/setup/shortcut-url", response_class=HTMLResponse)
+    async def shortcut_url_page():
+        """Page with the API URL for copy-pasting into iOS Shortcuts."""
+        url = f"https://auth.mybaseline.health/api/ingest_health_snapshot?token={config.api_token}"
+        return f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shortcut Setup</title>
+<style>
+  body {{ font-family: system-ui, sans-serif; background: #09090b; color: #fafafa;
+         display: flex; align-items: center; justify-content: center; min-height: 100vh;
+         margin: 0; padding: 20px; }}
+  .card {{ background: #111113; border: 1px solid #27272a; border-radius: 16px;
+           padding: 32px; max-width: 500px; width: 100%; }}
+  h1 {{ font-size: 1.1rem; margin: 0 0 16px 0; }}
+  .url {{ background: #1a1a1e; border: 1px solid #333; border-radius: 8px;
+          padding: 14px; font-family: monospace; font-size: 0.75rem; word-break: break-all;
+          line-height: 1.5; margin-bottom: 16px; user-select: all; }}
+  button {{ background: #22c55e; color: #000; border: none; border-radius: 8px;
+            padding: 12px 24px; font-size: 1rem; font-weight: 600; cursor: pointer;
+            width: 100%; }}
+  button:active {{ background: #16a34a; }}
+  .hint {{ color: #71717a; font-size: 0.8rem; margin-top: 12px; text-align: center; }}
+  .copied {{ color: #22c55e; font-weight: 600; }}
+</style></head>
+<body><div class="card">
+  <h1>Paste this URL into your shortcut</h1>
+  <div class="url" id="url">{url}</div>
+  <button onclick="navigator.clipboard.writeText(document.getElementById('url').textContent);this.textContent='Copied!';this.classList.add('copied')">
+    Copy URL
+  </button>
+  <p class="hint">Tap Copy, then go back to Shortcuts and paste into the URL field.</p>
+</div></body></html>"""
+
     @app.get("/health")
     async def health_check():
         return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}

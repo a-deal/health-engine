@@ -249,3 +249,41 @@ class TestIngestEndpoint:
             },
         )
         assert response.status_code == 403
+
+    def test_get_with_flat_metric_params(self, client, tmp_path):
+        """iOS Shortcuts simplified flow: flat query params instead of nested metrics dict."""
+        data_dir = tmp_path / "data" / "users" / "default"
+        data_dir.mkdir(parents=True)
+
+        with patch("mcp_server.tools._data_dir", return_value=data_dir):
+            response = client.get(
+                "/api/ingest_health_snapshot?token=test-token-123"
+                "&resting_hr=58.5&steps=9200&hrv_sdnn=42.3"
+                "&weight_lbs=192.5&sleep_start=2026-03-22T23:15:00"
+                "&sleep_end=2026-03-23T06:45:00"
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ingested"] is True
+        assert data["metrics_count"] == 6
+        assert set(data["metrics_stored"]) == {
+            "resting_hr", "steps", "hrv_sdnn",
+            "weight_lbs", "sleep_start", "sleep_end",
+        }
+
+    def test_get_flat_params_with_user_id(self, client, tmp_path):
+        """Flat params with explicit user_id."""
+        data_dir = tmp_path / "data" / "users" / "paul"
+        data_dir.mkdir(parents=True)
+
+        with patch("mcp_server.tools._data_dir", return_value=data_dir):
+            response = client.get(
+                "/api/ingest_health_snapshot?token=test-token-123"
+                "&user_id=paul&resting_hr=62&vo2_max=38.5"
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ingested"] is True
+        assert data["metrics_count"] == 2
