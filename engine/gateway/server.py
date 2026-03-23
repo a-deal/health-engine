@@ -203,7 +203,9 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
   .copied {{ color: #22c55e; font-weight: 600; }}
 </style></head>
 <body><div class="card">
-  <h1>Paste this URL into your shortcut</h1>
+  <h1>Install Baseline Health Sync</h1>
+  <a href="https://www.icloud.com/shortcuts/b0c11b2912c1434fad4a2d87f4d2a762" style="display:block;background:#22c55e;color:#000;border:none;border-radius:8px;padding:14px 24px;font-size:1rem;font-weight:600;text-align:center;text-decoration:none;margin-bottom:16px;">Add Shortcut</a>
+  <h1 style="margin-top:24px;">API URL (for manual setup)</h1>
   <div class="url" id="url">{url}</div>
   <button onclick="navigator.clipboard.writeText(document.getElementById('url').textContent);this.textContent='Copied!';this.classList.add('copied')">
     Copy URL
