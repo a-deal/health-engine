@@ -18,7 +18,7 @@ import time
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, Query, Request, UploadFile, File, Form
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from mcp_server.tools import TOOL_REGISTRY
 
@@ -492,3 +492,34 @@ def _sign_shortcut(unsigned_bytes: bytes) -> bytes | None:
                     os.unlink(p)
                 except OSError:
                     pass
+
+
+async def open_automation_redirect():
+    """Redirect to shortcuts://create-automation via an HTML page.
+
+    GET /open/automation
+
+    WhatsApp won't make shortcuts:// URLs tappable, but it will make
+    https:// URLs tappable. This page redirects to the Shortcuts app's
+    automation creation screen.
+    """
+    return HTMLResponse(content="""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="0;url=shortcuts://create-automation">
+<title>Opening Shortcuts...</title>
+<style>
+body { font-family: -apple-system, sans-serif; text-align: center; padding: 60px 20px; background: #f5f5f7; color: #1d1d1f; }
+h1 { font-size: 22px; font-weight: 600; margin-bottom: 12px; }
+p { font-size: 16px; color: #86868b; margin-bottom: 24px; }
+a { color: #0071e3; text-decoration: none; font-size: 16px; }
+</style>
+</head>
+<body>
+<h1>Opening Shortcuts</h1>
+<p>If nothing happened, tap the link below.</p>
+<a href="shortcuts://create-automation">Open Shortcuts App</a>
+</body>
+</html>""", status_code=200)

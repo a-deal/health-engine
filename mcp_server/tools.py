@@ -1056,7 +1056,7 @@ def _connect_wearable(service: str, user_id: str = "default") -> dict:
             "supported": True,
             "setup_method": "one_tap_install",
             "install_url": download_url,
-            "automation_url": "shortcuts://create-automation",
+            "automation_url": "https://auth.mybaseline.health/open/automation",
             "coach_instructions": (
                 "Apple Watch is fully supported. Send TWO messages:\n"
                 "Message 1: Send the install_url link. Say something like: "
