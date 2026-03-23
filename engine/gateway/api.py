@@ -437,7 +437,7 @@ async def api_shortcut(
             content=result_bytes,
             media_type="application/x-shortcut",
             headers={
-                "Content-Disposition": f'attachment; filename="Baseline Health Sync.shortcut"',
+                "Content-Disposition": f'inline; filename="Baseline Health Sync.shortcut"',
             },
         )
 
@@ -492,6 +492,55 @@ def _sign_shortcut(unsigned_bytes: bytes) -> bytes | None:
                     os.unlink(p)
                 except OSError:
                     pass
+
+
+async def open_shortcut_redirect(
+    request: Request,
+    token: str = Query(...),
+    user_id: str = Query(...),
+):
+    """Redirect to shortcuts://import-shortcut via an HTML page.
+
+    GET /open/shortcut?token=...&user_id=paul
+
+    Builds a shortcuts://import-shortcut URL that points to /api/shortcut
+    for the actual file download. This way tapping one HTTPS link in WhatsApp
+    opens the Shortcuts app with an "Add Shortcut" prompt.
+    """
+    config = request.app.state.config
+    if not config.api_token:
+        raise HTTPException(500, "API token not configured on server")
+    if token != config.api_token:
+        raise HTTPException(403, "Invalid token")
+
+    from urllib.parse import quote
+
+    # The raw .shortcut file URL that the Shortcuts app will fetch
+    download_url = f"https://auth.mybaseline.health/api/shortcut?token={token}&user_id={user_id}"
+    encoded_url = quote(download_url, safe="")
+    shortcut_name = quote("Baseline Health Sync", safe="")
+    import_url = f"shortcuts://import-shortcut?url={encoded_url}&name={shortcut_name}"
+
+    return HTMLResponse(content=f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="0;url={import_url}">
+<title>Installing Shortcut...</title>
+<style>
+body {{ font-family: -apple-system, sans-serif; text-align: center; padding: 60px 20px; background: #f5f5f7; color: #1d1d1f; }}
+h1 {{ font-size: 22px; font-weight: 600; margin-bottom: 12px; }}
+p {{ font-size: 16px; color: #86868b; margin-bottom: 24px; }}
+a {{ color: #0071e3; text-decoration: none; font-size: 16px; }}
+</style>
+</head>
+<body>
+<h1>Installing Baseline Health Sync</h1>
+<p>If nothing happened, tap the link below.</p>
+<a href="{import_url}">Open in Shortcuts App</a>
+</body>
+</html>""", status_code=200)
 
 
 async def open_automation_redirect():

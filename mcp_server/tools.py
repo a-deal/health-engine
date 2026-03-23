@@ -1050,12 +1050,12 @@ def _connect_wearable(service: str, user_id: str = "default") -> dict:
         from engine.gateway.config import load_gateway_config
         gw_config = load_gateway_config()
         token = gw_config.api_token or ""
-        download_url = f"https://auth.mybaseline.health/api/shortcut?token={token}&user_id={user_id}"
+        install_url = f"https://auth.mybaseline.health/open/shortcut?token={token}&user_id={user_id}"
         return {
             "service": "apple_health",
             "supported": True,
             "setup_method": "one_tap_install",
-            "install_url": download_url,
+            "install_url": install_url,
             "automation_url": "https://auth.mybaseline.health/open/automation",
             "coach_instructions": (
                 "Apple Watch is fully supported. Send TWO messages:\n"
