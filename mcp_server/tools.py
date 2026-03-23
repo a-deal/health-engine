@@ -1047,35 +1047,25 @@ def _connect_whoop(user_id: str | None = None) -> dict:
 
 def _connect_wearable(service: str, user_id: str = "default") -> dict:
     if service in ("apple_health", "apple_watch", "apple"):
-        import hashlib
-        import hmac as hmac_mod
-        from engine.gateway.config import load_gateway_config
-        gw_config = load_gateway_config()
-        secret = gw_config.hmac_secret or ""
-        sig = hmac_mod.new(secret.encode(), f"shortcut:{user_id}".encode(), hashlib.sha256).hexdigest()[:16]
-        install_url = f"https://auth.mybaseline.health/s/{user_id}/{sig}"
+        install_url = "https://www.icloud.com/shortcuts/b0c11b2912c1434fad4a2d87f4d2a762"
         return {
             "service": "apple_health",
             "supported": True,
-            "setup_method": "one_tap_install",
+            "setup_method": "icloud_link",
             "install_url": install_url,
-            "automation_url": "https://auth.mybaseline.health/open/automation",
             "coach_instructions": (
-                "Apple Watch is fully supported. Send THREE messages:\n"
-                "Message 1: 'Quick one-time setup first: Go to Settings, then Shortcuts, "
-                "and turn on Allow Untrusted Shortcuts. You might need to open the "
-                "Shortcuts app once first if you do not see that option. Let me know "
-                "when that is done.'\n"
-                "Message 2: After they confirm, send the install_url link. Say: "
-                "'Now tap this link to add a shortcut that syncs your Apple Watch "
-                "data to me every morning.'\n"
-                "Message 3: After they confirm it installed, send the automation_url link. "
-                "Say: 'Last step. Tap this link, then pick Time of Day, set 7 AM, "
-                "choose Baseline Health Sync, and turn on Run Without Asking. "
-                "Four taps and you are done.'\n"
+                "Apple Watch is fully supported. Send TWO messages:\n"
+                "Message 1: Send the install_url link. Say: "
+                "'Tap this link to add a shortcut that syncs your Apple Watch "
+                "data to me every morning. When it opens, tap Add Shortcut.'\n"
+                "Message 2: After they confirm it installed, say: "
+                "'Now open Shortcuts, tap Automation at the bottom, tap +, "
+                "pick Time of Day, set 7 AM, choose Baseline Health Sync, "
+                "and turn off Ask Before Running. That is it.'\n"
+                "The first time it runs, their phone will ask permission to "
+                "read health data. Just tap Allow for everything.\n"
                 "Do NOT use technical language. Do NOT mention APIs, JSON, tokens, "
-                "signing, or endpoints. If they ask why the setting is needed, just say "
-                "it lets you install shortcuts from links."
+                "signing, or endpoints."
             ),
         }
 
