@@ -1046,10 +1046,23 @@ def _connect_whoop(user_id: str | None = None) -> dict:
 
 
 def _connect_wearable(service: str, user_id: str = "default") -> dict:
+    if service in ("apple_health", "apple_watch", "apple"):
+        return {
+            "service": "apple_health",
+            "connection_method": "ios_shortcuts",
+            "status": "not_oauth",
+            "instructions": (
+                "Apple Health connects via an iOS Shortcut that auto-syncs daily. "
+                "Guide the user through creating the Shortcut. See the 'Apple Health "
+                "Shortcuts Bridge' section in TOOLS.md for the full setup guide. "
+                "The Shortcut reads HealthKit data and POSTs to the ingest_health_snapshot endpoint."
+            ),
+        }
+
     supported = ["garmin", "oura", "whoop"]
     if service not in supported:
         return {
-            "error": f"Unsupported service: {service}. Supported: {', '.join(supported)}",
+            "error": f"Unsupported service: {service}. Supported: {', '.join(supported)}. For Apple Health, use service='apple_health'.",
         }
 
     from engine.gateway.config import load_gateway_config
@@ -2114,12 +2127,12 @@ def register_tools(mcp: FastMCP):
 
     @mcp.tool()
     def connect_wearable(service: str, user_id: str = "default") -> dict:
-        """Get a tappable auth link for connecting a wearable device.
-        The user opens this link on their phone to sign in.
-        Currently supports: garmin, oura, whoop.
+        """Get connection instructions for a wearable device.
+        For OAuth services (garmin, oura, whoop): returns a tappable auth link.
+        For Apple Health/Apple Watch: returns iOS Shortcuts setup instructions.
 
         Args:
-            service: Wearable service name (garmin, oura, whoop)
+            service: Wearable service name (garmin, oura, whoop, apple_health, apple_watch, apple)
             user_id: User identifier for multi-user support
         """
         return _connect_wearable(service, user_id)

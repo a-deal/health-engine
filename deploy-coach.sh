@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Deploy workspace files to Mac Mini and optionally reset sessions.
+# Usage:
+#   ./deploy-coach.sh [workspace] --reset <phone>   # Copy files + reset one user
+#   ./deploy-coach.sh [workspace] --reset all        # Copy files + reset all users
+#   ./deploy-coach.sh [workspace]                    # Copy files + restart gateway
+
+WORKSPACE_DIR="${1:-$(dirname "$0")/workspace}"
+REMOTE="mac-mini"
+REMOTE_WORKSPACE="~/.openclaw/workspace/"
+REMOTE_PATH='export PATH="/opt/homebrew/bin:$HOME/Library/pnpm:$PATH"'
+
+# Resolve to absolute path
+WORKSPACE_DIR="$(cd "$WORKSPACE_DIR" && pwd)"
+
+if [ ! -d "$WORKSPACE_DIR" ]; then
+    echo "ERROR: workspace directory not found: $WORKSPACE_DIR"
+    exit 1
+fi
+
+# Collect files to deploy: all .md files + users.yaml
+FILES=()
+for f in "$WORKSPACE_DIR"/*.md "$WORKSPACE_DIR"/users.yaml; do
+    [ -f "$f" ] && FILES+=("$f")
+done
+
+if [ ${#FILES[@]} -eq 0 ]; then
+    echo "ERROR: no .md or users.yaml files found in $WORKSPACE_DIR"
+    exit 1
+fi
+
+echo "Deploying ${#FILES[@]} files to $REMOTE:$REMOTE_WORKSPACE"
+echo "---"
+
+TOTAL_SIZE=0
+for f in "${FILES[@]}"; do
+    SIZE=$(wc -c < "$f" | tr -d ' ')
+    TOTAL_SIZE=$((TOTAL_SIZE + SIZE))
+    printf "  %-30s %s bytes\n" "$(basename "$f")" "$SIZE"
+done
+echo "---"
+echo "Total: $TOTAL_SIZE bytes"
+echo ""
+
+# Copy files
+scp "${FILES[@]}" "$REMOTE:$REMOTE_WORKSPACE"
+echo "Files copied."
+echo ""
+
+# Reset specific user sessions or restart gateway
+if [ "${2:-}" = "--reset" ]; then
+    PHONE="${3:-}"
+    if [ -z "$PHONE" ]; then
+        echo "Usage: ./deploy-coach.sh [workspace_dir] --reset <phone>"
+        echo "       ./deploy-coach.sh [workspace_dir] --reset all"
+        exit 1
+    fi
+
+    if [ "$PHONE" = "all" ]; then
+        echo "Resetting ALL user sessions..."
+        ssh "$REMOTE" "$REMOTE_PATH; openclaw sessions --json 2>/dev/null | python3 -c \"
+import json, sys
+d = json.load(sys.stdin)
+for s in d['sessions']:
+    if 'whatsapp:direct' in s['key']:
+        print(s['key'])
+\"" | while read -r key; do
+            echo "  Resetting: $key"
+            ssh "$REMOTE" "$REMOTE_PATH; openclaw gateway call sessions.reset --params '{\"key\": \"$key\"}' 2>/dev/null"
+        done
+    else
+        SESSION_KEY="agent:main:whatsapp:direct:$PHONE"
+        echo "Resetting session: $SESSION_KEY"
+        ssh "$REMOTE" "$REMOTE_PATH; openclaw gateway call sessions.reset --params '{\"key\": \"$SESSION_KEY\"}'"
+    fi
+    echo ""
+    echo "Deploy complete. Session(s) reset. Next message picks up new files."
+else
+    echo "Restarting gateway..."
+    ssh "$REMOTE" "$REMOTE_PATH; openclaw gateway stop && sleep 3 && openclaw gateway install"
+    echo ""
+    echo "Deploy complete. All sessions reset (gateway restarted)."
+    echo ""
+    echo "Tip: Use --reset <phone> to reset one user without restarting:"
+    echo "  ./deploy-coach.sh --reset +14152009584"
+    echo "  ./deploy-coach.sh --reset all"
+fi

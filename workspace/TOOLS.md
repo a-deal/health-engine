@@ -66,7 +66,7 @@ web_fetch("https://auth.mybaseline.health/api/log_habits?token=NZCT4pzvxC36OSaCz
 | pull_oura | history, user_id | Pull fresh Oura Ring data. |
 | connect_whoop | user_id | Check WHOOP connection status. |
 | pull_whoop | history, user_id | Pull fresh WHOOP data. |
-| connect_wearable | service, user_id | Get a tappable auth link for wearable connection. Supports: garmin, oura, whoop. |
+| connect_wearable | service, user_id | Get connection instructions for any wearable. Supports: garmin, oura, whoop (OAuth link), apple_health/apple_watch (iOS Shortcuts guide). |
 | import_apple_health | file_path, user_id | Import an Apple Health export ZIP or XML file. |
 | ingest_health_snapshot | user_id, metrics (JSON) | Receive a daily health snapshot from an iOS Shortcut. See Apple Health Shortcuts section below. |
 | check_health_priorities | user_id | Scan labs and vitals for red flags. Returns flags with severity, coaching messages, and connections to the user's current goal. Call after new lab results arrive. |
