@@ -104,8 +104,52 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
         state = _sign_state(user_id, service)
         return f"{config.base_url}/auth/{service}?user={user_id}&state={state}"
 
+    def _sign_shortcut_url(user_id: str) -> str:
+        """Generate HMAC signature for a shortcut download URL (no expiry)."""
+        payload = f"shortcut:{user_id}"
+        return hmac.new(_hmac_secret.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+
+    def _verify_shortcut_sig(user_id: str, sig: str) -> bool:
+        """Verify shortcut download signature."""
+        expected = _sign_shortcut_url(user_id)
+        return hmac.compare_digest(sig, expected)
+
+    def generate_shortcut_url(user_id: str) -> str:
+        """Generate a clean, signed shortcut download URL."""
+        sig = _sign_shortcut_url(user_id)
+        return f"{config.base_url}/s/{user_id}/{sig}"
+
+    @app.get("/s/{user_id}/{sig}")
+    async def serve_shortcut(user_id: str, sig: str):
+        """Serve a signed .shortcut file from a clean URL (no query params).
+
+        GET /s/paul/abc123def456
+
+        Safari sees the response as a .shortcut file and prompts to open
+        in the Shortcuts app. No URL scheme hackery needed.
+        """
+        if not _verify_shortcut_sig(user_id, sig):
+            raise HTTPException(403, "Invalid or expired link")
+
+        signed_path = os.path.join("data", "shortcuts", f"{user_id}.shortcut")
+        if not os.path.exists(signed_path):
+            raise HTTPException(404, "Shortcut not yet generated for this user")
+
+        with open(signed_path, "rb") as f:
+            content = f.read()
+
+        from fastapi.responses import Response
+        return Response(
+            content=content,
+            media_type="application/octet-stream",
+            headers={
+                "Content-Disposition": f'attachment; filename="Baseline Health Sync.shortcut"',
+            },
+        )
+
     # Expose for use by MCP tools
     app.state.generate_auth_url = generate_auth_url
+    app.state.generate_shortcut_url = generate_shortcut_url
     app.state.config = config
 
     @app.get("/", response_class=HTMLResponse)

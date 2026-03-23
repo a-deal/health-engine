@@ -1047,10 +1047,13 @@ def _connect_whoop(user_id: str | None = None) -> dict:
 
 def _connect_wearable(service: str, user_id: str = "default") -> dict:
     if service in ("apple_health", "apple_watch", "apple"):
+        import hashlib
+        import hmac as hmac_mod
         from engine.gateway.config import load_gateway_config
         gw_config = load_gateway_config()
-        token = gw_config.api_token or ""
-        install_url = f"https://auth.mybaseline.health/open/shortcut?token={token}&user_id={user_id}"
+        secret = gw_config.hmac_secret or ""
+        sig = hmac_mod.new(secret.encode(), f"shortcut:{user_id}".encode(), hashlib.sha256).hexdigest()[:16]
+        install_url = f"https://auth.mybaseline.health/s/{user_id}/{sig}"
         return {
             "service": "apple_health",
             "supported": True,
