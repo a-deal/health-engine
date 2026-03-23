@@ -121,22 +121,28 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
 
     @app.get("/s/{user_id}/{sig}")
     async def serve_shortcut(user_id: str, sig: str):
-        """Serve a signed .shortcut file from a clean URL (no query params).
+        """Serve a .shortcut file from a clean URL (no query params).
 
         GET /s/paul/abc123def456
 
-        Safari sees the response as a .shortcut file and prompts to open
-        in the Shortcuts app. No URL scheme hackery needed.
+        Serves pre-signed file if available, otherwise generates unsigned.
+        Safari handles the .shortcut extension and prompts to open in Shortcuts.
         """
         if not _verify_shortcut_sig(user_id, sig):
             raise HTTPException(403, "Invalid or expired link")
 
+        # Try pre-signed first, fall back to unsigned generation
         signed_path = os.path.join("data", "shortcuts", f"{user_id}.shortcut")
-        if not os.path.exists(signed_path):
-            raise HTTPException(404, "Shortcut not yet generated for this user")
-
-        with open(signed_path, "rb") as f:
-            content = f.read()
+        if os.path.exists(signed_path):
+            with open(signed_path, "rb") as f:
+                content = f.read()
+        else:
+            # Generate unsigned on-the-fly
+            from engine.shortcuts.generator import generate_shortcut
+            content = generate_shortcut(
+                user_id=user_id,
+                api_token=config.api_token,
+            )
 
         from fastapi.responses import Response
         return Response(

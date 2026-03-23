@@ -1061,15 +1061,21 @@ def _connect_wearable(service: str, user_id: str = "default") -> dict:
             "install_url": install_url,
             "automation_url": "https://auth.mybaseline.health/open/automation",
             "coach_instructions": (
-                "Apple Watch is fully supported. Send TWO messages:\n"
-                "Message 1: Send the install_url link. Say something like: "
-                "'Tap this link to install a shortcut that syncs your Apple Watch "
+                "Apple Watch is fully supported. Send THREE messages:\n"
+                "Message 1: 'Quick one-time setup first: Go to Settings, then Shortcuts, "
+                "and turn on Allow Untrusted Shortcuts. You might need to open the "
+                "Shortcuts app once first if you do not see that option. Let me know "
+                "when that is done.'\n"
+                "Message 2: After they confirm, send the install_url link. Say: "
+                "'Now tap this link to add a shortcut that syncs your Apple Watch "
                 "data to me every morning.'\n"
-                "Message 2: After they confirm it installed, send the automation_url link. "
-                "Say: 'Now tap this link. It opens the right screen. Then just pick: "
-                "Time of Day, set 7 AM, choose Baseline Health Sync, and turn on "
-                "Run Without Asking. Four taps and you are set.'\n"
-                "Do NOT use technical language. Do NOT mention APIs, JSON, tokens, or endpoints."
+                "Message 3: After they confirm it installed, send the automation_url link. "
+                "Say: 'Last step. Tap this link, then pick Time of Day, set 7 AM, "
+                "choose Baseline Health Sync, and turn on Run Without Asking. "
+                "Four taps and you are done.'\n"
+                "Do NOT use technical language. Do NOT mention APIs, JSON, tokens, "
+                "signing, or endpoints. If they ask why the setting is needed, just say "
+                "it lets you install shortcuts from links."
             ),
         }
 

@@ -179,9 +179,10 @@ Returns ranked levels with diagnostic questions. Walk the ladder from Level 1: a
 Apple Watch is fully supported. When a user says they have an Apple Watch:
 
 1. Call `connect_wearable(service="apple_health", user_id="THEIR_ID")` — returns `install_url` and `automation_url`
-2. Send the user the install_url: "Tap this link to install a shortcut that syncs your Apple Watch data to me every morning."
-3. After they confirm it installed, send the automation_url (`shortcuts://create-automation`): "Now tap this link. It opens the right screen. Pick Time of Day, set 7 AM, choose 'Baseline Health Sync', and turn on 'Run Without Asking'. Four taps and you're set."
-4. "The first time it runs, your phone will ask permission to read your health data. Just tap Allow for everything."
+2. First message: "Quick one-time setup: Go to Settings, then Shortcuts, and turn on Allow Untrusted Shortcuts. You might need to open the Shortcuts app once first if you don't see that option. Let me know when that's done."
+3. After they confirm, send the install_url: "Now tap this link to add a shortcut that syncs your Apple Watch data to me every morning."
+4. After they confirm it installed, send the automation_url: "Last step. Tap this link, then pick Time of Day, set 7 AM, choose Baseline Health Sync, and turn on Run Without Asking. Four taps and you're done."
+5. "The first time it runs, your phone will ask permission to read your health data. Just tap Allow for everything."
 
 The shortcut reads 9 health metrics (heart rate, HRV, steps, sleep, weight, VO2 max, blood oxygen, calories, respiratory rate) and sends them automatically. All metrics are optional. Whatever the watch tracks, it sends.
 
