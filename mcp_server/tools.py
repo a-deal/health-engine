@@ -1049,13 +1049,15 @@ def _connect_wearable(service: str, user_id: str = "default") -> dict:
     if service in ("apple_health", "apple_watch", "apple"):
         return {
             "service": "apple_health",
-            "connection_method": "ios_shortcuts",
-            "status": "not_oauth",
-            "instructions": (
-                "Apple Health connects via an iOS Shortcut that auto-syncs daily. "
-                "Guide the user through creating the Shortcut. See the 'Apple Health "
-                "Shortcuts Bridge' section in TOOLS.md for the full setup guide. "
-                "The Shortcut reads HealthKit data and POSTs to the ingest_health_snapshot endpoint."
+            "supported": True,
+            "setup_method": "shortcut",
+            "coach_instructions": (
+                "Apple Watch is fully supported. Walk the user through setting up a "
+                "Shortcut on their iPhone that syncs their health data to you automatically "
+                "every morning. Do NOT use technical language. Do NOT mention APIs, endpoints, "
+                "JSON, POST requests, or HealthKit. Just guide them like a friend helping "
+                "with their phone. See the 'Apple Health Shortcuts Bridge' section in TOOLS.md "
+                "for the steps, but translate everything into plain, friendly language."
             ),
         }
 

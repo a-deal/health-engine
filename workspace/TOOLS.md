@@ -176,24 +176,23 @@ Returns ranked levels with diagnostic questions. Walk the ladder from Level 1: a
 
 ### Apple Health Shortcuts Bridge (for Apple Watch users)
 
-Apple Watch users can set up a daily auto-sync using iOS Shortcuts. This replaces the manual ZIP export.
+Apple Watch is fully supported via an iOS Shortcut that syncs health data every morning automatically.
 
-The Shortcut reads HealthKit data on the phone and POSTs a JSON snapshot to the gateway daily at 7am.
+**IMPORTANT: When walking a user through this, use plain friendly language. Never mention APIs, JSON, POST requests, endpoints, HealthKit, or any technical terms. Guide them like a friend helping set up their phone.**
 
-**How to guide a user through setup:**
+**Setup flow (give ONE step at a time, wait for them to confirm before the next):**
 
-1. Tell them: "I can set up a daily auto-sync from your Apple Watch. It uses iOS Shortcuts and takes about 5 minutes. Want to do it now?"
-2. Walk them through creating a Shortcut that reads: Resting Heart Rate, Heart Rate Variability, Step Count, Sleep Analysis (duration + start/end times), Weight, VO2 Max, Blood Oxygen, Active Energy Burned, Respiratory Rate
-3. The Shortcut builds a JSON dict and uses "Get Contents of URL" to POST to: https://auth.mybaseline.health/api/ingest_health_snapshot
-4. JSON body format: {"token": "NZCT4pzvxC36OSaCztUYjq2_LAkqdC5_LmTFysa9VAY", "user_id": "USER_ID", "metrics": {"resting_hr": 55, "hrv_sdnn": 42, "steps": 8500, "sleep_hours": 7.2, "sleep_start": "22:45", "sleep_end": "06:10", "weight_lbs": 192, "vo2_max": 51, "blood_oxygen": 97, "active_calories": 450, "respiratory_rate": 14}}
-5. Set up a daily automation: Personal Automation, Time of Day, 7:00 AM, run the Shortcut, toggle "Run without asking"
-6. First run will ask for Health permissions. Tap Allow All.
+1. "Open the Shortcuts app on your iPhone. If you don't see it, search for 'Shortcuts' on your home screen."
+2. "Tap the + to create a new shortcut. Name it something like 'Health Sync'."
+3. "Now we'll add actions that read your health data. Tap 'Add Action', search for 'Find Health Samples', and add one for each of these (one at a time):" Resting Heart Rate, Heart Rate Variability, Step Count, Sleep Analysis, Weight, VO2 Max, Blood Oxygen, Active Energy Burned, Respiratory Rate
+4. "For each one, set the time range to 'today' so it grabs today's reading."
+5. "Next, add a 'Get Contents of URL' action. This is what sends your numbers to me." Set the URL to: https://auth.mybaseline.health/api/ingest_health_snapshot — Method: POST, Request Body: JSON with keys: token (use the API token), user_id (their user_id from users.yaml), metrics (dict of the health values). **Do not show the user the raw JSON. Build the action step by step in the Shortcuts UI.**
+6. "Last step: let's make it run automatically every morning. Go to the Automation tab, tap +, choose 'Time of Day', set it to 7:00 AM, pick your Shortcut, and turn on 'Run without asking'."
+7. "The first time it runs, your phone will ask permission to read your health data. Just tap Allow for everything."
 
-All metrics are optional. Whatever the phone has, it sends. Missing metrics are skipped.
+All metrics are optional. Whatever the watch tracks, the Shortcut sends. Missing ones are just skipped.
 
-Data saves to apple_health_daily.json (time series, appends daily) and apple_health_latest.json (rolling 7-day averages, same schema as garmin_latest.json).
-
-**Full setup guide:** docs/apple-health-shortcut-setup.md on the server.
+**Key rule for coaching tone:** The user should feel like they're setting up a simple phone automation, not configuring software. If they get stuck, troubleshoot patiently. Never say "endpoint", "payload", "request", "API", or "JSON" to the user.
 
 ### Health Priority Checkpoint
 
