@@ -153,7 +153,7 @@ Milo (the coaching agent) has access to all of a user's data through Kiso's MCP 
 | 1 (5-10 users) | When CloudKit disabled | Supabase RLS, realtime subscriptions, background job queue |
 | 2 (50+ users) | When paying users | Penetration test, formal data policy, GDPR compliance, Litestream backups verified |
 
-## For Paul
+## iOS Integration Notes
 
 When building SyncService.swift:
 - Store the API token in iOS Keychain, not UserDefaults or config files

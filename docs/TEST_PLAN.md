@@ -75,19 +75,19 @@ After configuring `gateway.yaml` with `token_persons`:
 
 ```yaml
 token_persons:
-  tok_paul:
-    - paul-person-uuid
-  tok_andrew:
-    - andrew-deal-001
+  tok_user_a:
+    - user-a-uuid
+  tok_user_b:
+    - user-b-uuid
 ```
 
 ```bash
-# Paul's token can access Paul's data
-curl -s http://localhost:18800/api/v1/persons/paul-person-uuid?token=tok_paul
+# User token can access their own data
+curl -s http://localhost:18800/api/v1/persons/user-a-uuid?token=tok_user_a
 # Should return 200
 
-# Paul's token CANNOT access Andrew's data
-curl -s http://localhost:18800/api/v1/persons/andrew-deal-001?token=tok_paul
+# User token CANNOT access another person's data
+curl -s http://localhost:18800/api/v1/persons/user-b-uuid?token=tok_user_a
 # Should return 403
 
 # Admin token can access everything

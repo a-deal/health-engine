@@ -1,12 +1,12 @@
-# Kiso Primer for Paul
+# Kiso Primer
 
-Everything you need to build SyncService.swift and understand how the pieces fit together.
+How the backend fits together and what the iOS app needs to connect to it.
 
 ## The Three Pieces
 
-**Kasane** (iOS app) is the user-facing product. Habits, check-ins, focus plans, the Today view. You own this.
+**Kasane** (iOS app) is the user-facing product. Habits, check-ins, focus plans, the Today view.
 
-**Kiso** (backend, this repo) is the shared data layer. One FastAPI process on Mac Mini serving both Kasane and Milo. SQLite for entities, CSVs for health metrics. You talk to it via REST at `/api/v1/`.
+**Kiso** (backend, this repo) is the shared data layer. One FastAPI process on Mac Mini serving both Kasane and Milo. SQLite for entities, CSVs for health metrics. The iOS app talks to it via REST at `/api/v1/`.
 
 **Milo** (coaching agent) is the AI coach. Runs on the same Mac Mini via OpenClaw. Reads and writes the same data Kasane does, through Kiso's MCP tools. When Milo writes a coaching message, Kasane picks it up on next sync. When Kasane writes a check-in, Milo sees it in the person context.
 
@@ -36,13 +36,13 @@ Full docs: [API.md](API.md)
 
 **Auth**: `Authorization: Bearer YOUR_TOKEN` or `?token=YOUR_TOKEN`
 
-Each device gets its own token mapped to specific person IDs in `gateway.yaml`. Your token can only read/write the persons assigned to it. Andrew's admin token can access everything. See [DATA_POLICY.md](DATA_POLICY.md) for the full access control model.
+Each device gets its own token mapped to specific person IDs in `gateway.yaml`. A token can only read/write the persons assigned to it. The admin token can access everything. See [DATA_POLICY.md](DATA_POLICY.md) for the full access control model.
 
 **Primary endpoint**:
 ```
 POST /api/v1/sync
 {
-  "deviceId": "pauls-iphone-15",
+  "deviceId": "iphone-15",
   "personId": "uuid",
   "lastSyncAt": "2026-03-23T12:00:00Z",   // null for first sync
   "changes": [
@@ -76,7 +76,7 @@ Response:
 
 ## Data Model Mapping
 
-Your CoreData entities map 1:1 to Kiso's SQLite:
+Kasane's CoreData entities map 1:1 to Kiso's SQLite:
 
 | iOS CoreData | Kiso entity | Notes |
 |---|---|---|
@@ -90,17 +90,17 @@ Your CoreData entities map 1:1 to Kiso's SQLite:
 
 All entities have: `id`, `createdAt`, `updatedAt`, `deletedAt` (null unless soft-deleted).
 
-## Where to Put SyncService.swift
+## Suggested iOS File Layout
 
-Based on the existing codebase structure:
+Based on the existing Kasane codebase structure:
 
 ```
 Habica/Services/SyncService.swift    <-- new
-Habica/Services/APIConfig.swift      <-- add Kiso base URL + token
+Habica/Services/APIConfig.swift      <-- Kiso base URL + token
 Habica/Models/SyncModels.swift       <-- Codable structs for request/response
 ```
 
-The existing `AIService.swift` has URLSession patterns you can follow (lines 692-763).
+`AIService.swift` has URLSession patterns worth following (lines 692-763).
 
 `CoreDataStack.swift` stays as-is. SyncService reads changes from CoreData, pushes to Kiso, and merges server changes back.
 
@@ -112,7 +112,7 @@ GET /api/v1/persons/:id/context
 
 Returns: person profile + active habits with recent check-ins (30 days) + latest focus plan + coaching messages + CSV health data (weight, wearables, labs, meals).
 
-This is what Milo reads before coaching. If you want to see what Milo sees, hit this endpoint.
+This is what Milo reads before coaching. Hit this endpoint to see exactly what Milo sees.
 
 ## Error Format
 
@@ -150,7 +150,7 @@ Full roadmap: [ROADMAP.md](ROADMAP.md)
 
 | File | What it does |
 |------|-------------|
-| `docs/API.md` | Full v1 API contract (your main reference) |
+| `docs/API.md` | Full v1 API contract (primary iOS reference) |
 | `docs/ARCHITECTURE.md` | System design, storage, deploy model |
 | `docs/MILO.md` | How Milo integrates, Mac Mini setup, cloud plan |
 | `docs/DATA_POLICY.md` | Access control, encryption, audit trail, security roadmap |

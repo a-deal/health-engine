@@ -2,7 +2,7 @@
 
 Kiso (基礎, "foundation") is the backend platform for Kasane (iOS app), Milo (coaching agent), and the health intelligence system. One monolithic Python process serving all three from a single Docker container on Mac Mini.
 
-## For iOS Developers (Paul)
+## For iOS Developers
 
 You care about the `/api/v1/` contract. Start here:
 
@@ -166,11 +166,11 @@ When a user asks "why do you measure this?" or "how does scoring work?", referen
 
 | Doc | Audience | What it covers |
 |-----|----------|----------------|
-| `docs/PRIMER.md` | Paul | Start here. SyncService guide, architecture overview, key files |
+| `docs/PRIMER.md` | iOS developers | Start here. SyncService guide, architecture overview, key files |
 | `docs/API.md` | iOS developers | Full v1 REST contract |
 | `docs/ARCHITECTURE.md` | All contributors | System design, storage, deploy model |
 | `docs/ROADMAP.md` | All contributors | Cloud progression phases |
-| `docs/MILO.md` | Andrew, Paul | Milo integration, Mac Mini, cloud plan |
+| `docs/MILO.md` | All contributors | Milo integration, Mac Mini, cloud plan |
 | `docs/DATA_POLICY.md` | All contributors | Data handling, access control, privacy, security roadmap |
 | `docs/METHODOLOGY.md` | Curious users, coach | Why we score each metric |
 | `docs/SCORING.md` | Contributors | How the scoring engine works |
