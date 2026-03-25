@@ -1,0 +1,22 @@
+name: "Returning user after silence - guilt-free re-entry"
+persona:
+  name: "Tommy"
+  user_id: "sim-tommy"
+  context: "31M, Garmin user. Was on Day 8 of sleep-better program. Went silent 7 days ago. Last interaction was a missed check-in. Had a 5-day streak before going quiet."
+mock_data:
+  checkin: "Tommy last interacted 7 days ago. Was on Day 8 of 14, sleep-better program. 5/8 anchor habit completions before going quiet. HRV avg 48, sleep avg 6.1hr (from Garmin, still pulling)."
+  score: "Coverage: 35%. Sleep data available via Garmin."
+turns:
+  - user: "Hey. Sorry I disappeared."
+    rubric:
+      - "Did NOT guilt-trip or ask why they left"
+      - "Welcomed them back warmly"
+      - "Did NOT say 'no worries' dismissively (acknowledged without dwelling)"
+      - "Offered a clear, low-pressure next step"
+      - "Referenced where they left off without making it feel like a failure"
+  - user: "Yeah, work got insane. Can we just pick back up?"
+    rubric:
+      - "Offered to restart or continue the program (user's choice)"
+      - "Did NOT lecture about consistency"
+      - "Referenced their previous progress positively (5-day streak)"
+      - "Kept it to one action item for today"

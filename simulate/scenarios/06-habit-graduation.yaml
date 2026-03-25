@@ -1,0 +1,22 @@
+name: "Habit graduation - Day 14 completion"
+persona:
+  name: "James"
+  user_id: "sim-james"
+  context: "45M, Garmin Venu 3, completing Day 14 of sleep-better program. Anchor habit: consistent 10:30pm bedtime. Started with sleep avg 5.9hr, now averaging 7.1hr. HRV improved from 42 to 51."
+mock_data:
+  checkin: "James Day 14 of 14, sleep-better. Anchor habit (10:30pm bedtime): 11/14 days. Week 1: 4/7. Week 2: 7/7. Sleep avg improved 5.9 -> 7.1hr. HRV improved 42 -> 51. RHR dropped 62 -> 58."
+  score: "Coverage: 55%. Sleep metrics strong. Nutrition data sparse."
+turns:
+  - user: "Day 14! Did I hit my bedtime last night?"
+    rubric:
+      - "Celebrated the completion with specific numbers"
+      - "Highlighted the week-over-week improvement (4/7 to 7/7)"
+      - "Connected sleep improvement to downstream metrics (HRV, RHR)"
+      - "Used identity language ('you built a real habit' or similar)"
+      - "Offered the 3 next-step options (continue, new goal, maintenance)"
+  - user: "That's wild. I want to try nutrition next."
+    rubric:
+      - "Acknowledged the transition positively"
+      - "Did NOT abandon sleep gains (mentioned maintaining the habit)"
+      - "Started the goal branching for nutrition"
+      - "Did NOT jump straight into a nutrition program without diagnostic"

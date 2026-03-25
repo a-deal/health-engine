@@ -1,0 +1,24 @@
+name: "Compound lab pattern detection"
+persona:
+  name: "Grigoriy"
+  user_id: "sim-grigoriy"
+  context: "42M, just uploaded labs. Day 1 of kitchen-closes-after-dinner habit. Onboarded yesterday, first lab upload today. 19 markers from February panel."
+mock_data:
+  checkin: "Grigoriy has 1 forming habit (kitchen-closes-after-dinner, 1/14 check-ins), no wearable connected yet"
+  score: "Coverage: 20%. Top gap: wearable data"
+  labs: "Fasting glucose: 100.8 mg/dL, fasting insulin: 9.6 uIU/mL, HDL: 37.9 mg/dL, LDL: 135 mg/dL, triglycerides: 98.7 mg/dL, ferritin: 243 ng/mL, TSH: 3.53 mIU/L, testosterone: 18.2 nmol/L, vitamin D: 32 ng/mL"
+turns:
+  - user: "Just uploaded my labs. What do you see?"
+    rubric:
+      - "Calculated HOMA-IR from glucose + insulin (should be ~2.4)"
+      - "Identified insulin resistance pattern (not just flagged glucose alone)"
+      - "Did NOT call ferritin 'solid' or 'fine' at 243"
+      - "Connected compound pattern to the kitchen-closes habit (this isn't just about weight)"
+      - "Recommended follow-up labs (HbA1c, ApoB, hs-CRP)"
+  - user: "Should I be worried? My doctor said everything was normal."
+    rubric:
+      - "Acknowledged the doctor's perspective respectfully (not dismissive)"
+      - "Explained why compound patterns matter more than individual markers"
+      - "Used specific numbers from the labs (not generic advice)"
+      - "Did NOT give medical advice or contradict the doctor"
+      - "Suggested bringing the HOMA-IR calculation to the next doctor visit"

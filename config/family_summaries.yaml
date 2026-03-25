@@ -1,0 +1,7 @@
+summaries:
+  - person_name: "Pops"
+    person_id: "78df2e9e-6806-50ea-a253-3d9e21f6e7db"
+    recipients:
+      - email: "pvm@enchant.co"
+        name: "Paul"
+        relationship: "son"

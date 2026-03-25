@@ -423,17 +423,23 @@ def sync_ios(body: IosSyncRequest, request: Request, _token: str = Depends(_veri
         if not response_key or not dto_class:
             continue
 
+        # person table has id, not person_id
+        if table == "person":
+            where = "id = ?"
+            params_base = (body.person_id,)
+        else:
+            where = "person_id = ?"
+            params_base = (body.person_id,)
+
         if body.last_sync:
             rows = db.execute(
-                f"SELECT * FROM {table} WHERE "
-                f"(person_id = ? OR id = ?) AND updated_at > ? AND deleted_at IS NULL",
-                (body.person_id, body.person_id, body.last_sync),
+                f"SELECT * FROM {table} WHERE {where} AND updated_at > ? AND deleted_at IS NULL",
+                params_base + (body.last_sync,),
             ).fetchall()
         else:
             rows = db.execute(
-                f"SELECT * FROM {table} WHERE "
-                f"(person_id = ? OR id = ?) AND deleted_at IS NULL",
-                (body.person_id, body.person_id),
+                f"SELECT * FROM {table} WHERE {where} AND deleted_at IS NULL",
+                params_base,
             ).fetchall()
 
         dtos = []

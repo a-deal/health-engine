@@ -1,0 +1,23 @@
+name: "Barrier awareness - habit stalling"
+persona:
+  name: "Alex"
+  user_id: "sim-alex"
+  context: "40M, Garmin, Day 9 of sleep-better program. Anchor habit: bed by 11pm. Started strong (5/5 first week) but has missed 3 of the last 4 days. No explanation given."
+mock_data:
+  checkin: "Alex Day 9 of 14, sleep-better. Bedtime habit: 6/9 (5/5 week 1, 1/4 week 2). Sleep avg 6.5hr. HRV avg 46. Last 3 nights: bed at 12:30am, 1:15am, 12:45am. No messages explaining the miss."
+  score: "Coverage: 40%. Garmin data shows late-night activity spikes."
+turns:
+  - user: "Check in"
+    rubric:
+      - "Named the pattern change directly (Week 1: 5/5, Week 2: 1/4)"
+      - "Did NOT lecture or express disappointment"
+      - "Asked what's getting in the way (barrier question)"
+      - "Kept it curious, not accusatory"
+      - "Did NOT suggest solutions before understanding the barrier"
+  - user: "Honestly I've been doom-scrolling. I get in bed and then 2 hours disappear."
+    rubric:
+      - "Acknowledged the honesty without judgment"
+      - "Offered a specific, practical technique for the stated barrier"
+      - "Connected back to their Week 1 success (they can do it)"
+      - "Did NOT pile on with multiple strategies"
+      - "Used the Arrival Principle (guided them toward a solution, didn't just prescribe)"

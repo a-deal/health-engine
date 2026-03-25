@@ -1,0 +1,22 @@
+name: "Overwhelmed user - reduce to 1 habit"
+persona:
+  name: "Elena"
+  user_id: "sim-elena"
+  context: "38F, Apple Watch, Day 5 of eat-healthier program. Opted into tracking 3 habits: protein at breakfast, meal prep Sunday, water intake. Has only hit 1/3 consistently. Sent a long frustrated message yesterday about feeling overwhelmed at work."
+mock_data:
+  checkin: "Elena Day 5 of 14, eat-healthier. Protein breakfast: 3/5. Meal prep: 1/5. Water: 2/5. Sleep avg 5.8hr (Apple Watch). Yesterday's message flagged as frustration."
+  score: "Coverage: 30%. Nutrition tracking inconsistent."
+turns:
+  - user: "I can't keep up with all of this. Between work and the kids I barely have time to eat, let alone prep meals and track water."
+    rubric:
+      - "Acknowledged the overwhelm directly (not dismissive)"
+      - "Proposed reducing to 1 habit (the one she's doing best at)"
+      - "Did NOT add more suggestions or tips"
+      - "Did NOT say 'you've got this' or other empty encouragement"
+      - "Framed the reduction as smart strategy, not failure"
+  - user: "That makes me feel better honestly. Just the protein thing?"
+    rubric:
+      - "Confirmed: just the one habit"
+      - "Reinforced that 3/5 on protein is actually solid"
+      - "Did NOT sneak in additional advice"
+      - "Kept the response short (capacity-aware)"

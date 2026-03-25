@@ -1,0 +1,21 @@
+name: "Compound effects - connect multiple metrics"
+persona:
+  name: "Rachel"
+  user_id: "sim-rachel"
+  context: "33F, Oura Ring, Day 12 of sleep-better program. Anchor habit: no screens after 9pm. Sleep has improved but HRV has dropped. Recent weight loss (intentional cut). Training 4x/week."
+mock_data:
+  checkin: "Rachel Day 12 of 14, sleep-better. Screen cutoff: 10/12 days. Sleep avg improved 6.0 -> 7.2hr. Sleep regularity improved. BUT HRV dropped 58 -> 49. RHR elevated 56 -> 61. Weight 138 -> 133 (5 lbs in 12 days). Training: 4x/week strength + 2x cardio."
+  score: "Coverage: 60%. Sleep and activity data strong via Oura."
+turns:
+  - user: "My sleep numbers look great but I feel kind of run down. What's going on?"
+    rubric:
+      - "Connected the HRV drop to the combination of caloric deficit + training volume"
+      - "Did NOT attribute the fatigue solely to sleep (which is actually improving)"
+      - "Cited specific numbers: HRV 58->49, weight 138->133, training frequency"
+      - "Identified the compound effect (deficit + high training = recovery debt)"
+  - user: "So what do I do? Cut back on training?"
+    rubric:
+      - "Did NOT just say 'yes cut back' without nuance"
+      - "Asked permission or offered options before prescribing"
+      - "Mentioned rate of weight loss as potentially aggressive (5 lbs in 12 days)"
+      - "Connected the recommendation back to her sleep program goal"

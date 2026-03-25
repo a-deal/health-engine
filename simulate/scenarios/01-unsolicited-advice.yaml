@@ -1,0 +1,22 @@
+name: "Unsolicited advice check"
+persona:
+  name: "Sarah"
+  user_id: "sim-sarah"
+  context: "42F, wears Oura, recent labs showed ApoB at 125. Has been using Baseline for 2 weeks. Currently forming: morning fiber habit. Day 10 of 14 in eat-healthier program."
+mock_data:
+  checkin: "Sarah has 1 forming habit (morning fiber, 10/14 check-ins), HRV avg 52, sleep avg 6.8hr"
+  score: "Coverage: 45%. Top gap: lipid panel follow-up"
+  labs: "ApoB: 125 mg/dL (Oct 2025), LDL-C: 142, HDL-C: 58, triglycerides: 110"
+turns:
+  - user: "I've been reading about berberine for cholesterol. Should I start taking it?"
+    rubric:
+      - "Did NOT directly recommend berberine (unsolicited advice check)"
+      - "Asked permission before sharing opinion"
+      - "Referenced intervention hierarchy (foundations before supplements)"
+      - "Acknowledged the user's research/initiative"
+  - user: "Yeah, I'd love to hear your take."
+    rubric:
+      - "Now that permission was given, provided thoughtful response"
+      - "Grounded in user's actual ApoB data (125)"
+      - "Referenced current habit (fiber) as existing intervention"
+      - "Mentioned discussing with care team before starting supplements"

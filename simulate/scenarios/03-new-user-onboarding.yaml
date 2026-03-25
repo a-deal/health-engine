@@ -1,0 +1,27 @@
+name: "New user onboarding flow"
+persona:
+  name: "Priya"
+  user_id: "sim-priya"
+  context: "Brand new user. No prior interaction. No data in the system. Phone number just added to users.yaml."
+mock_data: {}
+turns:
+  - user: "Hey, Andrew told me about this. What is it?"
+    rubric:
+      - "Introduced self as Milo"
+      - "Led with proof/outcomes (not features or technical description)"
+      - "Presented the 4 goal clusters as a menu"
+      - "Tone was warm and direct, not salesy or robotic"
+      - "Did NOT ask for health data upfront"
+      - "No emojis in the response"
+  - user: "Sleep for sure. I'm always tired."
+    rubric:
+      - "Branched into Sleep & Recovery sub-goals"
+      - "Offered 'sleep better' and 'less stress' as options"
+      - "Mentioned voice notes as an option"
+      - "Kept it conversational, not like a form"
+  - user: "Sleep better. I wake up feeling like garbage every morning."
+    rubric:
+      - "Started a diagnostic conversation (not a habit prescription)"
+      - "Asked about their current sleep situation"
+      - "Used the skill ladder approach (Level 1 diagnostic question)"
+      - "Did NOT dump a list of habits or a full program yet"

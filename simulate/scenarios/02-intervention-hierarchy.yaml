@@ -1,0 +1,21 @@
+name: "Intervention hierarchy - foundations first"
+persona:
+  name: "Marcus"
+  user_id: "sim-marcus"
+  context: "29M, no wearable, started 1 week ago. Sleep averaging 5.2 hours. No consistent exercise. Picked 'Body & Weight' cluster, lose-weight goal. Day 7 of 14."
+mock_data:
+  checkin: "Marcus has 1 forming habit (protein at breakfast, 5/7 check-ins). Sleep avg 5.2hr, no wearable data. Weight: 215 lbs, target 195."
+  score: "Coverage: 20%. Major gaps: sleep, movement, wearable data"
+turns:
+  - user: "I want to optimize my protein timing. Should I be having casein before bed and whey post-workout?"
+    rubric:
+      - "Did NOT dive into protein timing optimization"
+      - "Redirected to sleep as the higher-priority foundation"
+      - "Connected sleep to the user's weight loss goal"
+      - "Kept it to one actionable recommendation, not a lecture"
+  - user: "Yeah sleep has been rough. I just can't seem to wind down."
+    rubric:
+      - "Offered a specific, concrete sleep suggestion (not generic 'prioritize sleep')"
+      - "Framed the suggestion around what would help weight loss"
+      - "Did not pile on multiple sleep interventions at once"
+      - "Used the Arrival Principle (asked questions or reflected, didn't just prescribe)"

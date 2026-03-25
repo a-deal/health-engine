@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Body Composition</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #09090b;
+  --surface: #111113;
+  --surface-2: #18181b;
+  --border: #27272a;
+  --border-subtle: #1c1c1f;
+  --text: #fafafa;
+  --text-2: #a1a1aa;
+  --text-3: #52525b;
+  --green: #22c55e;
+  --green-dim: rgba(34, 197, 94, 0.1);
+  --red: #ef4444;
+  --red-dim: rgba(239, 68, 68, 0.08);
+  --amber: #f59e0b;
+  --amber-dim: rgba(245, 158, 11, 0.08);
+  --blue: #3b82f6;
+  --blue-dim: rgba(59, 130, 246, 0.06);
+  --violet: #8b5cf6;
+  --violet-dim: rgba(139, 92, 246, 0.08);
+  --font-display: 'Barlow Condensed', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --gray: #71717a;
+  --gray-dim: rgba(113, 113, 122, 0.1);
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+/* Grain */
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── Top bar ── */
+.topbar {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(9, 9, 11, 0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.topbar-inner {
+  max-width: 960px; margin: 0 auto;
+  padding: 14px 32px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.topbar-left {
+  display: flex; align-items: center; gap: 16px;
+}
+.topbar-back {
+  font-family: var(--font-mono); font-size: 0.65rem;
+  color: var(--text-3); text-decoration: none;
+  transition: color 0.2s;
+}
+.topbar-back:hover { color: var(--text-2); }
+.topbar-title {
+  font-family: var(--font-display); font-size: 1.1rem;
+  color: var(--text); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.topbar-right {
+  font-family: var(--font-mono); font-size: 0.6rem;
+  color: var(--text-3); letter-spacing: 0.05em;
+}
+
+.page { max-width: 960px; margin: 0 auto; padding: 0 32px 80px; }
+
+/* ── Phase header ── */
+.phase-header {
+  padding: 48px 0 40px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 48px;
+}
+.phase-label {
+  font-family: var(--font-mono); font-size: 0.6rem;
+  color: var(--text-3); text-transform: uppercase;
+  letter-spacing: 0.14em; margin-bottom: 8px;
+}
+.phase-name {
+  font-family: var(--font-display); font-size: 3rem;
+  font-weight: 600; line-height: 1.1;
+  text-transform: uppercase; letter-spacing: 0.02em;
+  color: var(--text); margin-bottom: 8px;
+}
+.phase-name em { font-style: italic; color: var(--gray); }
+.phase-note {
+  font-size: 0.9rem; color: var(--text-2);
+  max-width: 560px; line-height: 1.6;
+}
+.phase-meta {
+  display: flex; gap: 32px; margin-top: 20px;
+}
+.phase-meta-item {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.phase-meta-val {
+  font-family: var(--font-mono); font-size: 1.1rem;
+  font-weight: 500; color: var(--text);
+}
+.phase-meta-label {
+  font-family: var(--font-mono); font-size: 0.55rem;
+  color: var(--text-3); text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* ── KPI row ── */
+.kpi-row {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 1px; background: var(--border-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px; overflow: hidden;
+  margin-bottom: 48px;
+}
+.kpi {
+  background: var(--surface); padding: 20px 24px;
+}
+.kpi-val {
+  font-family: var(--font-mono); font-size: 1.5rem;
+  font-weight: 600; color: var(--text); line-height: 1;
+}
+.kpi-val .unit { font-size: 0.75rem; font-weight: 400; color: var(--text-3); }
+.kpi-label {
+  font-family: var(--font-mono); font-size: 0.55rem;
+  color: var(--text-3); text-transform: uppercase;
+  letter-spacing: 0.1em; margin-top: 6px;
+}
+.kpi-sub {
+  font-size: 0.7rem; color: var(--text-3); margin-top: 4px;
+}
+
+/* ── Section ── */
+.section { margin-bottom: 48px; }
+.section-head {
+  display: flex; align-items: baseline; gap: 12px;
+  margin-bottom: 20px; padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.section-title {
+  font-family: var(--font-display); font-size: 1.5rem;
+  font-weight: 600; color: var(--text);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.section-tag {
+  font-family: var(--font-mono); font-size: 0.55rem;
+  color: var(--text-3); text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* ── Weight chart ── */
+.chart-wrap {
+  background: var(--surface); border: 1px solid var(--border-subtle);
+  border-radius: 12px; padding: 24px;
+  overflow: hidden;
+}
+.chart-wrap svg { display: block; }
+
+/* ── Timeline ── */
+.timeline {
+  background: var(--surface); border: 1px solid var(--border-subtle);
+  border-radius: 12px; padding: 24px 24px 20px;
+  position: relative;
+}
+
+/* Phase bar */
+.tl-bar {
+  display: flex; height: 28px; border-radius: 6px;
+  overflow: hidden; position: relative;
+}
+.tl-bar-seg {
+  height: 100%; position: relative;
+  display: flex; align-items: center;
+  padding: 0 12px;
+  font-family: var(--font-display); font-size: 0.7rem;
+  font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.1em;
+  overflow: hidden; white-space: nowrap;
+}
+.tl-bar-seg.cut { background: var(--red); color: rgba(255,255,255,0.9); }
+.tl-bar-seg.cut.past { opacity: 0.7; }
+.tl-bar-seg.cut.future-part { background: #7f1d1d; color: rgba(255,255,255,0.3); }
+.tl-bar-seg.maintenance { background: var(--gray); color: rgba(255,255,255,0.85); }
+.tl-bar-seg.maintenance.future-part { background: #3f3f46; color: rgba(255,255,255,0.35); }
+.tl-bar-seg.gain { background: var(--green); color: rgba(255,255,255,0.9); }
+.tl-bar-seg.gain.future-part { background: #14532d; color: rgba(255,255,255,0.3); }
+.tl-bar-seg.future { background: var(--surface-2); color: var(--text-3); }
+
+/* Now marker */
+.tl-now-marker {
+  position: absolute; top: -4px; bottom: -4px;
+  width: 3px; background: var(--text);
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(250,250,250,0.3);
+  z-index: 3; transform: translateX(-50%);
+}
+
+/* Phase summaries directly under the bar, aligned to segments */
+.tl-phase-row {
+  display: flex; margin-top: 10px;
+}
+.tl-phase-text {
+  padding: 0 4px;
+  font-size: 0.75rem; color: var(--text-3); line-height: 1.45;
+}
+.tl-phase-text.active { color: var(--text-2); }
+.tl-phase-text .tl-dates {
+  font-family: var(--font-mono); font-size: 0.55rem;
+  color: var(--text-3); display: block; margin-bottom: 3px;
+}
+
+/* Journey recap */
+.tl-recap {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 16px; margin-top: 16px;
+}
+.tl-recap-title {
+  font-family: var(--font-display); font-size: 0.8rem;
+  font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--text-3);
+  margin-bottom: 10px;
+}
+.tl-recap-items {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.tl-recap-item {
+  display: flex; align-items: baseline; gap: 10px;
+  font-size: 0.78rem; line-height: 1.4;
+}
+.tl-recap-date {
+  font-family: var(--font-mono); font-size: 0.6rem;
+  color: var(--text-3); flex-shrink: 0; min-width: 52px;
+}
+.tl-recap-text { color: var(--text-2); }
+.tl-recap-text strong { color: var(--text); font-weight: 500; }
+.tl-recap-item.milestone { border-left: 2px solid var(--amber); padding-left: 8px; }
+.tl-recap-item.milestone .tl-recap-date { color: var(--amber); }
+
+/* ── Recovery cards ── */
+.recovery-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.rcard {
+  background: var(--surface); border: 1px solid var(--border-subtle);
+  border-radius: 12px; padding: 18px 20px;
+}
+.rcard-label {
+  font-family: var(--font-mono); font-size: 0.6rem;
+  color: var(--text-3); text-transform: uppercase;
+  letter-spacing: 0.08em; margin-bottom: 8px;
+  display: flex; align-items: center; gap: 6px;
+}
+.rcard-dot { width: 5px; height: 5px; border-radius: 50%; }
+.rcard-val {
+  font-family: var(--font-mono); font-size: 1.4rem;
+  font-weight: 600; line-height: 1;
+}
+.rcard-unit { font-size: 0.65rem; font-weight: 400; color: var(--text-3); }
+.rcard-trend {
+  font-size: 0.7rem; color: var(--text-3); margin-top: 6px;
+}
+.rcard-trend.good { color: var(--green); }
+.rcard-trend.bad { color: var(--red); }
+.rcard-spark { margin-top: 8px; height: 36px; }
+.rcard-spark svg { width: 100%; height: 36px; }
+
+/* ── Strength ── */
+.lift-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.lift-card {
+  background: var(--surface); border: 1px solid var(--border-subtle);
+  border-radius: 12px; padding: 18px 20px;
+}
+.lift-name {
+  font-family: var(--font-mono); font-size: 0.6rem;
+  color: var(--text-3); text-transform: uppercase;
+  letter-spacing: 0.08em; margin-bottom: 8px;
+}
+.lift-val {
+  font-family: var(--font-mono); font-size: 1.4rem;
+  font-weight: 600; line-height: 1;
+}
+.lift-unit { font-size: 0.65rem; font-weight: 400; color: var(--text-3); }
+.lift-bar-wrap {
+  margin-top: 10px; height: 4px; background: var(--surface-2);
+  border-radius: 2px; overflow: hidden;
+}
+.lift-bar { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
+.lift-sub {
+  font-family: var(--font-mono); font-size: 0.6rem;
+  color: var(--text-3); margin-top: 6px;
+}
+
+/* ── Protocols ── */
+.protocol-stack { display: flex; flex-direction: column; gap: 16px; }
+.protocol {
+  background: var(--surface); border: 1px solid var(--border-subtle);
+  border-radius: 12px; overflow: hidden;
+}
+.protocol-head {
+  padding: 20px 24px;
+  display: flex; justify-content: space-between; align-items: flex-start;
+  cursor: pointer; user-select: none;
+  transition: background 0.2s;
+}
+.protocol-head:hover { background: var(--surface-2); }
+.protocol-left { flex: 1; }
+.protocol-name {
+  font-family: var(--font-display); font-size: 1.15rem;
+  font-weight: 600; margin-bottom: 4px;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.protocol-phase {
+  font-family: var(--font-mono); font-size: 0.6rem;
+  color: var(--text-3); letter-spacing: 0.05em;
+}
+.protocol-right {
+  display: flex; align-items: center; gap: 16px;
+  flex-shrink: 0;
+}
+.protocol-day {
+  font-family: var(--font-mono); font-size: 0.8rem;
+  color: var(--text-2);
+}
+.protocol-pct {
+  font-family: var(--font-mono); font-size: 1.3rem;
+  font-weight: 600;
+}
+.protocol-chev {
+  width: 18px; height: 18px; color: var(--text-3);
+  transition: transform 0.2s;
+}
+.protocol.open .protocol-chev { transform: rotate(180deg); }
+
+.protocol-body {
+  display: none; padding: 0 24px 24px;
+  border-top: 1px solid var(--border-subtle);
+}
+.protocol.open .protocol-body { display: block; padding-top: 20px; }
+
+.protocol-focus {
+  font-size: 0.85rem; color: var(--text-2);
+  margin-bottom: 16px; line-height: 1.5;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+}
+
+/* Habit rows inside protocol */
+.habit-rows { display: flex; flex-direction: column; gap: 6px; }
+.habit-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 12px; border-radius: 8px;
+  font-size: 0.85rem;
+}
+.habit-row.hit { color: var(--text); }
+.habit-row.missed { color: var(--text-3); }
+.habit-check {
+  width: 18px; height: 18px; border-radius: 4px;
+  border: 1.5px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.habit-row.hit .habit-check {
+  background: var(--green-dim); border-color: var(--green);
+}
+.habit-row.hit .habit-check::after {
+  content: '';
+  width: 8px; height: 5px;
+  border-left: 1.5px solid var(--green);
+  border-bottom: 1.5px solid var(--green);
+  transform: rotate(-45deg) translateY(-1px);
+}
+.habit-label { flex: 1; }
+.habit-streak {
+  font-family: var(--font-mono); font-size: 0.65rem;
+  color: var(--text-3);
+}
+
+/* Protocol outcomes */
+.outcome-row {
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 16px; padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+.outcome-label {
+  font-family: var(--font-mono); font-size: 0.6rem;
+  color: var(--text-3); text-transform: uppercase;
+  letter-spacing: 0.06em; flex: 1;
+}
+.outcome-current {
+  font-family: var(--font-mono); font-size: 0.85rem;
+  font-weight: 500;
+}
+.outcome-arrow { color: var(--text-3); font-size: 0.7rem; }
+.outcome-target {
+  font-family: var(--font-mono); font-size: 0.85rem;
+  color: var(--text-3);
+}
+
+/* Nudge */
+.nudge {
+  margin-top: 16px; padding: 12px 16px;
+  background: var(--amber-dim); border: 1px solid rgba(245,158,11,0.12);
+  border-radius: 8px; font-size: 0.8rem;
+  color: var(--amber); line-height: 1.5;
+}
+.nudge-habit {
+  font-family: var(--font-mono); font-size: 0.6rem;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  margin-bottom: 4px; opacity: 0.7;
+}
+
+/* ── Signal card ── */
+.signal-card {
+  border-radius: 12px; padding: 20px 24px;
+  margin-bottom: 16px;
+}
+.signal-card.warning {
+  background: var(--amber-dim); border: 1px solid rgba(245,158,11,0.15);
+}
+.signal-card.critical {
+  background: var(--red-dim); border: 1px solid rgba(239,68,68,0.15);
+}
+.signal-head {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 8px;
+}
+.signal-sev {
+  font-family: var(--font-mono); font-size: 0.55rem;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 2px 6px; border-radius: 3px;
+}
+.signal-sev.warning { background: rgba(245,158,11,0.2); color: var(--amber); }
+.signal-sev.critical { background: rgba(239,68,68,0.2); color: var(--red); }
+.signal-title {
+  font-family: var(--font-body); font-weight: 600;
+  font-size: 0.9rem;
+}
+.signal-body {
+  font-size: 0.82rem; color: var(--text-2); line-height: 1.55;
+}
+
+/* ── Today's Schedule ── */
+.sched {
+  background: var(--surface); border: 1px solid var(--border-subtle);
+  border-radius: 12px; padding: 24px;
+}
+.sched-targets {
+  display: flex; gap: 24px; margin-bottom: 20px;
+  font-family: var(--font-mono); font-size: 0.65rem;
+  color: var(--text-3);
+}
+.sched-targets strong {
+  color: var(--text-2); font-weight: 500;
+}
+.sched-line {
+  width: 100%; height: 1px; background: var(--border-subtle);
+  margin: 16px 0;
+}
+.sched-items { display: flex; flex-direction: column; gap: 0; }
+.sched-item {
+  display: grid; grid-template-columns: 60px 1fr;
+  gap: 16px; padding: 12px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.02);
+}
+.sched-item:last-child { border-bottom: none; }
+.sched-item.past { opacity: 0.4; }
+.sched-item.now { opacity: 1; }
+.sched-item.upcoming { opacity: 1; }
+
+.sched-time {
+  font-family: var(--font-mono); font-size: 0.85rem;
+  font-weight: 500; color: var(--text);
+  padding-top: 1px;
+}
+.sched-item.past .sched-time { color: var(--text-3); text-decoration: line-through; }
+.sched-item.now .sched-time { color: var(--green); }
+
+.sched-content { }
+.sched-label {
+  font-size: 0.88rem; font-weight: 500;
+  color: var(--text); margin-bottom: 3px;
+}
+.sched-item.past .sched-label { color: var(--text-3); }
+.sched-item.now .sched-label { color: var(--green); }
+
+.sched-why {
+  font-size: 0.75rem; color: var(--text-3);
+  line-height: 1.5; max-width: 600px;
+}
+.sched-item.now .sched-why { color: var(--text-2); }
+
+.sched-check {
+  display: inline-block; width: 14px; height: 14px;
+  border-radius: 3px; border: 1.5px solid var(--border);
+  vertical-align: middle; margin-right: 6px; position: relative; top: -1px;
+}
+.sched-item.past .sched-check {
+  background: var(--green-dim); border-color: var(--green);
+}
+
+/* ── Responsive ── */
+@media (max-width: 700px) {
+  .page { padding: 0 16px 60px; }
+  .topbar-inner { padding: 12px 16px; }
+  .phase-name { font-size: 2rem; }
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .recovery-grid { grid-template-columns: 1fr 1fr; }
+  .lift-grid { grid-template-columns: 1fr; }
+  .phase-meta { flex-wrap: wrap; gap: 20px; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-left">
+      <a class="topbar-back" href="index.html">&larr; Dashboard</a>
+      <span class="topbar-title">Body Composition</span>
+    </div>
+    <div class="topbar-right" id="topbar-date"></div>
+  </div>
+</div>
+
+<div class="page">
+
+  <div class="phase-header" id="phase-header">
+    <div class="phase-label">Current Phase</div>
+    <div class="phase-name" id="phase-name">Loading...</div>
+    <div class="phase-note" id="phase-note"></div>
+    <div class="phase-meta" id="phase-meta"></div>
+  </div>
+
+  <!-- Coaching signals -->
+  <div id="signals"></div>
+
+  <!-- KPIs -->
+  <div class="kpi-row" id="kpi-row"></div>
+
+  <!-- Today's Schedule -->
+  <div class="section">
+    <div class="section-head">
+      <span class="section-title">Today's Schedule</span>
+      <span class="section-tag" id="sched-tag"></span>
+    </div>
+    <div class="sched" id="sched"></div>
+  </div>
+
+  <!-- Weight Chart -->
+  <div class="section">
+    <div class="section-head">
+      <span class="section-title">Weight</span>
+      <span class="section-tag" id="weight-tag"></span>
+    </div>
+    <div class="chart-wrap" id="weight-chart"></div>
+  </div>
+
+  <!-- Timeline -->
+  <div class="section">
+    <div class="section-head">
+      <span class="section-title">Timeline</span>
+      <span class="section-tag" id="timeline-tag"></span>
+    </div>
+    <div class="timeline" id="timeline"></div>
+  </div>
+
+  <!-- Recovery -->
+  <div class="section">
+    <div class="section-head">
+      <span class="section-title">Recovery</span>
+      <span class="section-tag" id="recovery-tag"></span>
+    </div>
+    <div class="recovery-grid" id="recovery-grid"></div>
+  </div>
+
+  <!-- Strength -->
+  <div class="section">
+    <div class="section-head">
+      <span class="section-title">Strength</span>
+      <span class="section-tag" id="strength-tag"></span>
+    </div>
+    <div class="lift-grid" id="lift-grid"></div>
+  </div>
+
+  <!-- Protocols -->
+  <div class="section">
+    <div class="section-head">
+      <span class="section-title">Protocols</span>
+      <span class="section-tag" id="protocol-tag"></span>
+    </div>
+    <div class="protocol-stack" id="protocol-stack"></div>
+  </div>
+
+</div>
+
+<script>
+/* ── Helpers ── */
+function fmt(s) {
+  const d = new Date(s + 'T12:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+function fmtFull(s) {
+  const d = new Date(s + 'T12:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+function daysBetween(a, b) {
+  return Math.round((new Date(b+'T12:00:00') - new Date(a+'T12:00:00')) / 86400000);
+}
+function liftName(k) { return k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()); }
+function habitName(k) { return k.replace(/_/g, ' '); }
+
+function spark(el, data, color) {
+  if (!el || !data || data.length < 2) return;
+  const v = data.filter(x => x != null);
+  if (v.length < 2) return;
+  const W = 180, H = 36, P = 3;
+  const mn = Math.min(...v), mx = Math.max(...v), rng = mx - mn || 1;
+  const pts = data.map((x, i) => x == null ? null : `${(i/(data.length-1))*W},${P+((mx-x)/rng)*(H-P*2)}`).filter(Boolean);
+  if (pts.length < 2) return;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('preserveAspectRatio','none');
+  svg.style.cssText = `width:100%;height:${H}px`;
+  // Area
+  const fx = pts[0].split(',')[0], lx = pts[pts.length-1].split(',')[0];
+  const area = document.createElementNS('http://www.w3.org/2000/svg','polygon');
+  area.setAttribute('points', `${fx},${H} ${pts.join(' ')} ${lx},${H}`);
+  area.setAttribute('fill', color); area.setAttribute('opacity','0.08');
+  svg.appendChild(area);
+  // Line
+  const line = document.createElementNS('http://www.w3.org/2000/svg','polyline');
+  line.setAttribute('points', pts.join(' '));
+  line.setAttribute('fill','none'); line.setAttribute('stroke', color);
+  line.setAttribute('stroke-width','1.5'); line.setAttribute('stroke-linecap','round');
+  svg.appendChild(line);
+  // Dot
+  const lp = pts[pts.length-1].split(',');
+  const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  dot.setAttribute('cx', lp[0]); dot.setAttribute('cy', lp[1]);
+  dot.setAttribute('r','2.5'); dot.setAttribute('fill', color);
+  svg.appendChild(dot);
+  el.appendChild(svg);
+}
+
+/* ── Phase ── */
+function rPhase(b) {
+  const t = b._config_targets || {};
+  const phase = (t.phase || 'tracking').replace(/_/g, ' ');
+  const phaseStarted = t.phase_started || b.as_of;
+  const dayIn = daysBetween(phaseStarted, b.as_of) + 1;
+  const weekIn = Math.ceil(dayIn / 7);
+
+  const nameEl = document.getElementById('phase-name');
+  const phaseColors = { cut: 'var(--red)', maintenance: 'var(--gray)', gain: 'var(--green)' };
+  const pCol = phaseColors[phase] || 'var(--text)';
+  nameEl.innerHTML = `<em style="color:${pCol}">${phase.charAt(0).toUpperCase() + phase.slice(1)}</em>`;
+
+  if (t.phase_note) {
+    document.getElementById('phase-note').textContent = t.phase_note;
+  }
+
+  const meta = document.getElementById('phase-meta');
+  const items = [
+    { val: `Day ${dayIn}`, label: 'In Phase' },
+    { val: `Week ${weekIn}`, label: 'Week' },
+    { val: `${b.weight?.current || '--'} lbs`, label: 'Current' },
+    { val: `${t.weight_lbs || '--'} lbs`, label: 'Target' },
+  ];
+  meta.innerHTML = items.map(i =>
+    `<div class="phase-meta-item"><div class="phase-meta-val">${i.val}</div><div class="phase-meta-label">${i.label}</div></div>`
+  ).join('');
+
+  document.getElementById('topbar-date').textContent = fmtFull(b.as_of);
+}
+
+/* ── Coaching Signals ── */
+function rSignals(b) {
+  const el = document.getElementById('signals');
+  const signals = b.coaching_signals || [];
+  if (!signals.length) return;
+  let h = '';
+  signals.forEach(s => {
+    const cls = s.severity === 'critical' ? 'critical' : 'warning';
+    h += `<div class="signal-card ${cls}">
+      <div class="signal-head">
+        <span class="signal-sev ${cls}">${s.severity}</span>
+        <span class="signal-title">${s.title}</span>
+      </div>
+      <div class="signal-body">${s.body}</div>
+    </div>`;
+  });
+  el.innerHTML = h;
+}
+
+/* ── KPIs ── */
+function rKPIs(b) {
+  const w = b.weight || {};
+  const g = b.garmin || {};
+  const el = document.getElementById('kpi-row');
+
+  const rate = w.weekly_rate;
+  const rateColor = !rate ? 'var(--text-3)' :
+    Math.abs(rate) < 0.3 ? 'var(--green)' :
+    rate < 0 ? 'var(--blue)' : 'var(--amber)';
+  const rateLabel = !rate ? '--' :
+    Math.abs(rate) < 0.3 ? 'Stable' :
+    rate < 0 ? 'Losing' : 'Gaining';
+
+  const kpis = [
+    { val: w.rolling_avg_7d || w.current || '--', unit: ' lbs', label: '7-Day Average', sub: '' },
+    { val: rate != null ? (rate > 0 ? '+' : '') + rate : '--', unit: ' lbs/wk', label: 'Weekly Rate', sub: rateLabel, color: rateColor },
+    { val: g.sleep_duration_avg || '--', unit: ' hrs', label: 'Sleep Avg', sub: g.sleep_duration_avg ? (g.sleep_duration_avg >= 7 ? 'On target' : 'Below 7hr target') : '' },
+    { val: g.hrv_rmssd_avg || '--', unit: ' ms', label: 'HRV', sub: g.resting_hr ? 'RHR ' + g.resting_hr + ' bpm' : '' },
+  ];
+
+  el.innerHTML = kpis.map(k =>
+    `<div class="kpi">
+      <div class="kpi-val" ${k.color ? `style="color:${k.color}"` : ''}>${k.val}<span class="unit">${k.unit}</span></div>
+      <div class="kpi-label">${k.label}</div>
+      ${k.sub ? `<div class="kpi-sub">${k.sub}</div>` : ''}
+    </div>`
+  ).join('');
+}
+
+/* ── Weight chart ── */
+function rWeight(b) {
+  const el = document.getElementById('weight-chart');
+  const wt = document.getElementById('weight-tag');
+  const entries = b._weight_entries || [];
+  if (!entries.length) { el.innerHTML = '<div style="padding:20px;color:var(--text-3);font-family:var(--font-mono);font-size:0.8rem">No weight data</div>'; return; }
+
+  const weights = entries.map(e => e.weight_lbs);
+  const dates = entries.map(e => e.date);
+  const totalChange = weights[weights.length-1] - weights[0];
+  wt.textContent = `${weights[0]} -> ${weights[weights.length-1]} lbs (${totalChange > 0 ? '+' : ''}${totalChange.toFixed(1)})`;
+
+  const W = 860, H = 240, PL = 50, PR = 20, PT = 20, PB = 40;
+  const mn = Math.min(...weights) - 1;
+  const mx = Math.max(...weights) + 1;
+  const yScale = (H - PT - PB) / (mx - mn);
+  const xScale = (W - PL - PR) / Math.max(1, dates.length - 1);
+
+  function y(w) { return PT + (mx - w) * yScale; }
+  function x(i) { return PL + i * xScale; }
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">`;
+
+  // Y grid lines
+  const step = mx - mn > 10 ? 2 : 1;
+  for (let w = Math.ceil(mn); w <= Math.floor(mx); w += step) {
+    const yy = y(w);
+    svg += `<line x1="${PL}" y1="${yy}" x2="${W-PR}" y2="${yy}" stroke="var(--border-subtle)" stroke-width="0.5"/>`;
+    svg += `<text x="${PL-8}" y="${yy+3}" text-anchor="end" fill="var(--text-3)" font-family="var(--font-mono)" font-size="9">${w}</text>`;
+  }
+
+  // 7-day rolling average
+  if (weights.length >= 7) {
+    let avgPts = [];
+    for (let i = 0; i < weights.length; i++) {
+      const start = Math.max(0, i - 6);
+      const slice = weights.slice(start, i + 1);
+      const avg = slice.reduce((a,b) => a+b) / slice.length;
+      avgPts.push(`${x(i)},${y(avg)}`);
+    }
+    svg += `<polyline points="${avgPts.join(' ')}" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" opacity="0.7"/>`;
+  }
+
+  // Data dots
+  weights.forEach((w, i) => {
+    svg += `<circle cx="${x(i)}" cy="${y(w)}" r="3" fill="var(--text-3)" opacity="0.5"/>`;
+  });
+
+  // Current dot
+  const last = weights.length - 1;
+  svg += `<circle cx="${x(last)}" cy="${y(weights[last])}" r="4.5" fill="var(--green)"/>`;
+
+  // Date labels
+  const labelCount = Math.min(6, dates.length);
+  const labelStep = Math.max(1, Math.floor(dates.length / labelCount));
+  for (let i = 0; i < dates.length; i += labelStep) {
+    svg += `<text x="${x(i)}" y="${H-8}" text-anchor="middle" fill="var(--text-3)" font-family="var(--font-mono)" font-size="9">${fmt(dates[i])}</text>`;
+  }
+  // Always label last
+  svg += `<text x="${x(last)}" y="${H-8}" text-anchor="end" fill="var(--text-2)" font-family="var(--font-mono)" font-size="9">${fmt(dates[last])}</text>`;
+
+  // Target line
+  const target = b._config_targets?.weight_lbs;
+  if (target && target >= mn && target <= mx) {
+    const ty = y(target);
+    svg += `<line x1="${PL}" y1="${ty}" x2="${W-PR}" y2="${ty}" stroke="var(--green)" stroke-width="1" stroke-dasharray="4 4" opacity="0.4"/>`;
+    svg += `<text x="${W-PR+4}" y="${ty+3}" fill="var(--green)" font-family="var(--font-mono)" font-size="9" opacity="0.6">${target}</text>`;
+  }
+
+  svg += '</svg>';
+  el.innerHTML = svg;
+}
+
+/* ── Timeline ── */
+function rTimeline(b) {
+  const el = document.getElementById('timeline');
+  const tag = document.getElementById('timeline-tag');
+
+  const phases = [
+    { name: 'Cut', type: 'cut', start: '2026-01-23', end: '2026-03-11',
+      summary: '203 to 195 lbs. -8 lbs in 7 weeks. Sleep debt forced early exit.' },
+    { name: 'Maintenance', type: 'maintenance', start: '2026-03-11', end: '2026-04-01',
+      summary: 'Fix sleep, let recovery rebound. Reassess Apr 1.' },
+  ];
+
+  const recap = [
+    { date: 'Jan 23', text: '<strong>Cut started</strong> at 203 lbs. 2,200 cal target, 190g protein.', milestone: true },
+    { date: 'Feb 5', text: 'Deadlift 476x1. Strength baseline set at beginning of cut.' },
+    { date: 'Feb 11', text: '<strong>Tirzepatide started</strong> at 2.5mg weekly. Appetite suppression kicked in fast.', milestone: true },
+    { date: 'Feb 19', text: 'Dropped to 193.7 (low point). Water and glycogen fluctuation.' },
+    { date: 'Feb 28', text: '<strong>Mini refeed</strong>. 2 days at maintenance. Strength bounced back.', milestone: true },
+    { date: 'Mar 7', text: '<strong>Sleep stack started</strong>. 6.5hr avg, \u00b1107min bedtime variance. The bottleneck.', milestone: true },
+    { date: 'Mar 11', text: '<strong>Switched to maintenance</strong>. Prioritizing sleep and recovery over deficit. 2,300-2,500 cal.', milestone: true },
+  ];
+
+  const overallStart = phases[0].start;
+  const overallEnd = phases[phases.length - 1].end;
+  const totalDays = daysBetween(overallStart, overallEnd);
+  const nowDays = daysBetween(overallStart, b.as_of);
+  const nowPct = Math.min(100, Math.max(0, (nowDays / totalDays) * 100));
+  tag.textContent = `Day ${nowDays + 1}`;
+
+  let h = '';
+
+  // Colored bar with phase segments
+  h += '<div class="tl-bar" style="position:relative">';
+  phases.forEach(p => {
+    const days = daysBetween(p.start, p.end);
+    const pct = (days / totalDays) * 100;
+    const isPast = b.as_of >= p.end;
+    const isCurrent = b.as_of >= p.start && b.as_of < p.end;
+
+    if (isCurrent) {
+      const elapsed = daysBetween(p.start, b.as_of);
+      const elapsedPct = (elapsed / totalDays) * 100;
+      const remainPct = pct - elapsedPct;
+      h += `<div class="tl-bar-seg ${p.type}" style="width:${elapsedPct}%">${elapsed > 3 ? p.name : ''}</div>`;
+      h += `<div class="tl-bar-seg ${p.type} future-part" style="width:${remainPct}%"></div>`;
+    } else if (isPast) {
+      h += `<div class="tl-bar-seg ${p.type} past" style="width:${pct}%">${p.name}</div>`;
+    } else {
+      h += `<div class="tl-bar-seg future" style="width:${pct}%">${p.name}</div>`;
+    }
+  });
+  h += `<div class="tl-now-marker" style="left:${nowPct}%"></div>`;
+  h += '</div>';
+
+  // Phase summaries aligned under their segments
+  h += '<div class="tl-phase-row">';
+  phases.forEach(p => {
+    const days = daysBetween(p.start, p.end);
+    const pct = (days / totalDays) * 100;
+    const isActive = b.as_of >= p.start && b.as_of < p.end;
+    h += `<div class="tl-phase-text${isActive ? ' active' : ''}" style="width:${pct}%">
+      <span class="tl-dates">${fmt(p.start)} - ${fmt(p.end)}</span>
+      ${p.summary}
+    </div>`;
+  });
+  h += '</div>';
+
+  // Journey So Far
+  h += '<div class="tl-recap">';
+  h += '<div class="tl-recap-title">Journey So Far</div>';
+  h += '<div class="tl-recap-items">';
+  recap.forEach(r => {
+    h += `<div class="tl-recap-item${r.milestone ? ' milestone' : ''}">
+      <span class="tl-recap-date">${r.date}</span>
+      <span class="tl-recap-text">${r.text}</span>
+    </div>`;
+  });
+  h += '</div></div>';
+
+  el.innerHTML = h;
+}
+
+/* ── Recovery ── */
+function rRecovery(b, daily) {
+  const el = document.getElementById('recovery-grid');
+  const tag = document.getElementById('recovery-tag');
+  const g = b.garmin;
+  if (!g || !g.last_updated) { el.innerHTML = '<div style="color:var(--text-3);font-family:var(--font-mono);font-size:0.8rem;padding:20px">No wearable data</div>'; return; }
+
+  let cards = 0;
+  let h = '';
+
+  // RHR
+  if (g.resting_hr != null) {
+    cards++;
+    const col = g.resting_hr <= 50 ? 'var(--green)' : g.resting_hr <= 60 ? 'var(--blue)' : 'var(--amber)';
+    h += `<div class="rcard">
+      <div class="rcard-label"><span class="rcard-dot" style="background:var(--blue)"></span>Resting HR</div>
+      <div class="rcard-val" style="color:${col}">${g.resting_hr}<span class="rcard-unit"> bpm</span></div>
+      <div class="rcard-trend" id="rhr-trend"></div>
+      <div class="rcard-spark" id="rhr-spark"></div>
+    </div>`;
+  }
+
+  // HRV
+  if (g.hrv_rmssd_avg != null) {
+    cards++;
+    const col = g.hrv_rmssd_avg >= 65 ? 'var(--green)' : g.hrv_rmssd_avg >= 50 ? 'var(--blue)' : 'var(--amber)';
+    h += `<div class="rcard">
+      <div class="rcard-label"><span class="rcard-dot" style="background:var(--green)"></span>HRV (RMSSD)</div>
+      <div class="rcard-val" style="color:${col}">${g.hrv_rmssd_avg}<span class="rcard-unit"> ms</span></div>
+      <div class="rcard-trend" id="hrv-trend"></div>
+      <div class="rcard-spark" id="hrv-spark"></div>
+    </div>`;
+  }
+
+  // Sleep
+  if (g.sleep_duration_avg != null) {
+    cards++;
+    const col = g.sleep_duration_avg >= 7 ? 'var(--green)' : g.sleep_duration_avg >= 6 ? 'var(--amber)' : 'var(--red)';
+    h += `<div class="rcard">
+      <div class="rcard-label"><span class="rcard-dot" style="background:var(--amber)"></span>Sleep</div>
+      <div class="rcard-val" style="color:${col}">${g.sleep_duration_avg}<span class="rcard-unit"> hrs</span></div>
+      <div class="rcard-trend" id="sleep-trend">${g.sleep_duration_avg >= 7 ? 'On target' : 'Below 7hr target'}</div>
+      <div class="rcard-spark" id="sleep-spark"></div>
+    </div>`;
+  }
+
+  el.innerHTML = h;
+  tag.textContent = cards + ' tracked';
+
+  // Sparklines from daily data
+  if (daily && daily.length) {
+    spark(document.getElementById('rhr-spark'), daily.map(d => d.rhr), 'var(--blue)');
+    spark(document.getElementById('hrv-spark'), daily.map(d => d.hrv), 'var(--green)');
+    const sleepCol = g.sleep_duration_avg >= 7 ? 'var(--green)' : g.sleep_duration_avg >= 6 ? 'var(--amber)' : 'var(--red)';
+    spark(document.getElementById('sleep-spark'), daily.map(d => d.sleep_hrs), sleepCol);
+
+    function trend(vals, id, unit, invert) {
+      if (vals.length <= 14) return;
+      const early = vals.slice(0, 14).reduce((a,b) => a+b) / 14;
+      const late = vals.slice(-14).reduce((a,b) => a+b) / 14;
+      const d = (late - early).toFixed(1);
+      const good = invert ? d <= 0 : d >= 0;
+      const arrow = d > 0 ? '\u2191' : '\u2193';
+      const el = document.getElementById(id);
+      if (el) {
+        el.textContent = `90d: ${early.toFixed(0)} \u2192 ${late.toFixed(0)} ${unit} (${arrow}${Math.abs(d)})`;
+        el.className = 'rcard-trend ' + (good ? 'good' : 'bad');
+      }
+    }
+    trend(daily.filter(d => d.rhr).map(d => d.rhr), 'rhr-trend', 'bpm', true);
+    trend(daily.filter(d => d.hrv).map(d => d.hrv), 'hrv-trend', 'ms', false);
+    trend(daily.filter(d => d.sleep_hrs).map(d => d.sleep_hrs), 'sleep-trend', 'hrs', false);
+  }
+}
+
+/* ── Strength ── */
+function rStrength(b) {
+  const el = document.getElementById('lift-grid');
+  const tag = document.getElementById('strength-tag');
+  const str = b.strength;
+  if (!str) { el.innerHTML = '<div style="color:var(--text-3)">No strength data</div>'; return; }
+
+  const lifts = Object.entries(str).filter(([_,d]) => d && d.current_1rm);
+  tag.textContent = lifts.length + ' lifts tracked';
+
+  // All-time peaks (from CLAUDE.md context)
+  const peaks = { deadlift: 550, bench_press: 315, squat: 425, front_squat: 425 };
+  const colors = { deadlift: 'var(--red)', bench_press: 'var(--blue)', squat: 'var(--green)', front_squat: 'var(--green)' };
+
+  el.innerHTML = lifts.map(([name, d]) => {
+    const peak = peaks[name] || d.peak_1rm;
+    const pct = Math.round((d.current_1rm / peak) * 100);
+    const col = colors[name] || 'var(--text-2)';
+    return `<div class="lift-card">
+      <div class="lift-name">${liftName(name)}</div>
+      <div class="lift-val" style="color:${col}">${d.current_1rm}<span class="lift-unit"> e1RM</span></div>
+      <div class="lift-bar-wrap"><div class="lift-bar" style="width:${pct}%;background:${col}"></div></div>
+      <div class="lift-sub">${pct}% of ${peak} all-time peak</div>
+    </div>`;
+  }).join('');
+}
+
+/* ── Protocols ── */
+function rProtocols(b) {
+  const el = document.getElementById('protocol-stack');
+  const tag = document.getElementById('protocol-tag');
+  const protocols = b.protocols || [];
+  tag.textContent = protocols.length + ' active';
+
+  // Map habit names to protocol memberships
+  const sleepHabits = ['am_sunlight','no_caffeine_after_noon','nicotine_cutoff','last_meal_2hr','evening_routine','ac_67','hot_shower','earplugs','bed_only_sleep'];
+  const hairHabits = ['hims_chewable'];
+  const skinHabits = ['am_skincare','pm_skincare','pm_retinoid'];
+
+  const habitMap = {
+    'Sleep Stack': sleepHabits,
+    'Hair Recovery': hairHabits,
+    'Skincare': skinHabits,
+  };
+
+  const allHabits = b.habits || {};
+
+  el.innerHTML = protocols.map((p, idx) => {
+    const open = idx === 0 ? ' open' : '';
+    const pctColor = p.phase_avg_completion == null ? 'var(--text-3)' :
+      p.phase_avg_completion >= 80 ? 'var(--green)' :
+      p.phase_avg_completion >= 50 ? 'var(--amber)' : 'var(--red)';
+    const pctText = p.phase_avg_completion != null ? Math.round(p.phase_avg_completion) + '%' : '--';
+
+    // Habits for this protocol
+    const protoHabits = habitMap[p.name] || [];
+    const lastNight = p.last_night || { hit: 0, total: 0, missed: [] };
+    const missedSet = new Set(lastNight.missed || []);
+
+    let habitsHtml = '';
+    if (protoHabits.length) {
+      habitsHtml = '<div class="habit-rows">';
+      protoHabits.forEach(hid => {
+        const hdata = allHabits[hid];
+        const isHit = hdata && hdata.current_streak > 0;
+        const isMissed = missedSet.has(hid);
+        const cls = isHit ? 'hit' : 'missed';
+        const streak = hdata ? hdata.current_streak + 'd' : '--';
+        habitsHtml += `<div class="habit-row ${cls}">
+          <div class="habit-check"></div>
+          <span class="habit-label">${habitName(hid)}</span>
+          <span class="habit-streak">${streak}</span>
+        </div>`;
+      });
+      habitsHtml += '</div>';
+    }
+
+    // Outcomes
+    let outcomesHtml = '';
+    if (p.outcomes && p.outcomes.length) {
+      p.outcomes.forEach(o => {
+        const statusCol = o.status === 'below_target' || o.status === 'above_target' ? 'var(--amber)' : 'var(--green)';
+        outcomesHtml += `<div class="outcome-row">
+          <div class="outcome-label">${o.id.replace(/_/g, ' ')}</div>
+          <div class="outcome-current" style="color:${statusCol}">${o.current} ${o.unit || ''}</div>
+          <div class="outcome-arrow">\u2192</div>
+          <div class="outcome-target">${o.target} ${o.unit || ''}</div>
+        </div>`;
+      });
+    }
+
+    // Nudge
+    let nudgeHtml = '';
+    if (p.top_nudge) {
+      nudgeHtml = `<div class="nudge">
+        <div class="nudge-habit">${p.top_nudge.label}</div>
+        ${p.top_nudge.nudge}
+      </div>`;
+    }
+
+    return `<div class="protocol${open}" id="proto-${idx}">
+      <div class="protocol-head" onclick="document.getElementById('proto-${idx}').classList.toggle('open')">
+        <div class="protocol-left">
+          <div class="protocol-name">${p.name}</div>
+          <div class="protocol-phase">Week ${p.week} \u00b7 ${p.phase}</div>
+        </div>
+        <div class="protocol-right">
+          <span class="protocol-day">Day ${p.day}</span>
+          <span class="protocol-pct" style="color:${pctColor}">${pctText}</span>
+          <svg class="protocol-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+      </div>
+      <div class="protocol-body">
+        <div class="protocol-focus">${p.phase_focus || ''}</div>
+        ${habitsHtml}
+        ${outcomesHtml}
+        ${nudgeHtml}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ── Today's Schedule ── */
+function rSchedule(b, protoYaml) {
+  const el = document.getElementById('sched');
+  const tag = document.getElementById('sched-tag');
+  if (!protoYaml) { el.innerHTML = '<div style="color:var(--text-3);font-size:0.8rem">Could not load protocol schedule.</div>'; return; }
+
+  // Minimal YAML parsing for the fields we need
+  const bedMatch = protoYaml.match(/target_bedtime:\s*"?(\d{2}:\d{2})"?/);
+  const wakeMatch = protoYaml.match(/target_waketime:\s*"?(\d{2}:\d{2})"?/);
+  const bedtime = bedMatch ? bedMatch[1] : '22:00';
+  const waketime = wakeMatch ? wakeMatch[1] : '06:00';
+
+  // Parse habits with offsets and why
+  const habits = [];
+  const habitBlocks = protoYaml.split(/\n  - id: /).slice(1);
+  habitBlocks.forEach(block => {
+    const get = (key) => {
+      const m = block.match(new RegExp(key + ':\\s*[>|]?\\s*\\n((?:\\s{6,}.+\\n?)+)'));
+      if (m) return m[1].replace(/^\s{6,}/gm, '').trim().replace(/\n\s*/g, ' ');
+      const m2 = block.match(new RegExp(key + ':\\s*"?([^"\\n]+)"?'));
+      return m2 ? m2[1].trim() : null;
+    };
+    const id = block.match(/^(\w+)/)?.[1];
+    const label = get('label');
+    const offsetFrom = get('offset_from');
+    const offsetMin = parseInt(get('offset_minutes')) || 0;
+    const fixedTime = get('fixed_time');
+    const why = get('why');
+    if (id && label) habits.push({ id, label, offsetFrom, offsetMin, fixedTime, why });
+  });
+
+  // Compute actual clock times
+  function parseTime(t) {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  }
+  function fmtTime(mins) {
+    if (mins < 0) mins += 1440;
+    if (mins >= 1440) mins -= 1440;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    const ampm = h >= 12 ? 'pm' : 'am';
+    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    return `${h12}:${String(m).padStart(2, '0')}${ampm}`;
+  }
+
+  const bedMin = parseTime(bedtime);
+  const wakeMin = parseTime(waketime);
+
+  const schedule = habits.map(h => {
+    let time;
+    if (h.fixedTime) {
+      time = parseTime(h.fixedTime);
+    } else if (h.offsetFrom === 'wake') {
+      time = wakeMin + h.offsetMin;
+    } else if (h.offsetFrom === 'bed') {
+      time = bedMin + h.offsetMin;
+    } else {
+      time = bedMin;
+    }
+    return { ...h, time, timeStr: fmtTime(time) };
+  });
+
+  // Sort by time (handle wrap-around: morning items < 720, evening > 720)
+  schedule.sort((a, b) => {
+    const aAdj = a.time < 600 ? a.time + 1440 : a.time;
+    const bAdj = b.time < 600 ? b.time + 1440 : b.time;
+    return aAdj - bAdj;
+  });
+
+  // Determine current time for past/now/upcoming
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+
+  // Today's habits from briefing
+  const todayHabits = b.habits || {};
+
+  // Count done vs total
+  const done = schedule.filter(s => {
+    const hd = todayHabits[s.id];
+    return hd && hd.current_streak > 0;
+  }).length;
+  tag.textContent = `${done}/${schedule.length} done`;
+
+  let h = '';
+  h += `<div class="sched-targets">
+    <span>Wake <strong>${fmtTime(wakeMin)}</strong></span>
+    <span>Bed <strong>${fmtTime(bedMin)}</strong></span>
+    <span>Target <strong>${((bedMin + 1440 - wakeMin) % 1440 / 60).toFixed(1)}hr</strong> window</span>
+  </div>`;
+
+  h += '<div class="sched-items">';
+  let passedNow = false;
+  schedule.forEach(s => {
+    const isDone = todayHabits[s.id] && todayHabits[s.id].current_streak > 0;
+    const isPast = isDone || s.time < nowMin;
+    const isNext = !passedNow && !isPast;
+    if (isNext) passedNow = true;
+    const cls = isDone ? 'past' : isNext ? 'now' : isPast ? 'past' : 'upcoming';
+
+    h += `<div class="sched-item ${cls}">
+      <div class="sched-time">${s.timeStr}</div>
+      <div class="sched-content">
+        <div class="sched-label">${isDone ? '<span class="sched-check"></span>' : ''}${s.label}</div>
+        ${s.why ? `<div class="sched-why">${s.why}</div>` : ''}
+      </div>
+    </div>`;
+  });
+  h += '</div>';
+
+  el.innerHTML = h;
+}
+
+/* ── Init ── */
+async function init() {
+  try {
+    const [bRes, gRes, wRes, cRes, ssRes] = await Promise.all([
+      fetch('../data/briefing.json'),
+      fetch('../data/garmin_daily.json').catch(() => null),
+      fetch('../data/weight_log.csv').catch(() => null),
+      fetch('../config.yaml').catch(() => null),
+      fetch('../protocols/sleep-stack.yaml').catch(() => null),
+    ]);
+    const b = await bRes.json();
+    const daily = gRes ? await gRes.json().catch(() => null) : null;
+    const ssYaml = ssRes && ssRes.ok ? await ssRes.text() : null;
+
+    // Parse weight CSV for chart
+    if (wRes && wRes.ok) {
+      const text = await wRes.text();
+      const lines = text.trim().split('\n');
+      const header = lines[0].split(',');
+      const dateIdx = header.indexOf('date');
+      const wtIdx = header.indexOf('weight_lbs');
+      b._weight_entries = lines.slice(1).map(l => {
+        const cols = l.split(',');
+        return { date: cols[dateIdx], weight_lbs: parseFloat(cols[wtIdx]) };
+      }).filter(e => e.date && !isNaN(e.weight_lbs));
+    } else {
+      b._weight_entries = [];
+    }
+
+    // Parse config targets
+    if (cRes && cRes.ok) {
+      const yaml = await cRes.text();
+      const targets = {};
+      const tMatch = yaml.match(/targets:\n([\s\S]*?)(?:\n\w|\n$)/);
+      if (tMatch) {
+        tMatch[1].split('\n').forEach(line => {
+          const m = line.match(/^\s+(\w+):\s*(.+)/);
+          if (m) {
+            let val = m[2].replace(/#.*/, '').trim().replace(/^["']|["']$/g, '');
+            targets[m[1]] = isNaN(val) ? val : parseFloat(val);
+          }
+        });
+      }
+      b._config_targets = targets;
+    } else {
+      b._config_targets = {};
+    }
+
+    rPhase(b);
+    rSignals(b);
+    rKPIs(b);
+    rSchedule(b, ssYaml);
+    rWeight(b);
+    rTimeline(b);
+    rRecovery(b, daily);
+    rStrength(b);
+    rProtocols(b);
+  } catch(e) {
+    console.error(e);
+    document.querySelector('.page').innerHTML += `<div style="padding:40px 0;color:var(--red);font-family:var(--font-mono);font-size:0.8rem">Error: ${e.message}</div>`;
+  }
+}
+init();
+</script>
+</body>
+</html>

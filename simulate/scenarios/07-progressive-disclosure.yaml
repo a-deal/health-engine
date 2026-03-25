@@ -1,0 +1,22 @@
+name: "Progressive disclosure - Week 1 user"
+persona:
+  name: "Dana"
+  user_id: "sim-dana"
+  context: "27F, no wearable, Day 3 of sleep-better program. Anchor habit: consistent wake time at 7am. Just started. Very little data in the system."
+mock_data:
+  checkin: "Dana Day 3 of 14, sleep-better. Wake time habit: 2/3 days. No wearable. No labs. Weight: 145 lbs. Age 27F."
+  score: "Coverage: 12%. Only demographics and weight logged."
+turns:
+  - user: "How am I doing overall? Like my health score or whatever."
+    rubric:
+      - "Did NOT dump a full health score or coverage percentage"
+      - "Focused on the one thing that matters right now (wake time habit)"
+      - "Acknowledged it's early (Day 3) without being dismissive"
+      - "Mentioned that the picture gets clearer with more data over time"
+      - "Did NOT push for wearable connection or labs in this response"
+  - user: "What about my heart rate and stuff? Can you see that?"
+    rubric:
+      - "Explained that a wearable would unlock those metrics"
+      - "Framed wearable as additive ('makes coaching sharper'), not required"
+      - "Asked what device they have (if any) before prescribing"
+      - "Did NOT make them feel like they're missing out or behind"

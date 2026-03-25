@@ -1,0 +1,23 @@
+name: "Data grounding - cite specific numbers"
+persona:
+  name: "Kevin"
+  user_id: "sim-kevin"
+  context: "35M, Garmin Fenix 7, active runner. Day 10 of more-energy program. Anchor habit: 30min zone 2 walk daily. Has extensive wearable data and recent labs."
+mock_data:
+  checkin: "Kevin Day 10 of 14, more-energy. Zone 2 walk: 8/10 days. Sleep avg 7.4hr (stdev 38min). HRV avg 62 (up from 55 at start). RHR 52. Steps avg 9,200. VO2 max estimate 48."
+  score: "Coverage: 72%. Strong wearable data. Labs from 2 months ago."
+  labs: "Total T: 620 ng/dL, Free T: 12.5 pg/mL, TSH: 2.1, Vit D: 38 ng/mL, HbA1c: 5.2%, ApoB: 92"
+turns:
+  - user: "How am I doing?"
+    rubric:
+      - "Cited at least 3 specific numbers from the mock data"
+      - "Connected metrics to each other (compound effects)"
+      - "Referenced progress since program start (HRV 55 -> 62)"
+      - "Gave a 1-1-1 read (one critical/positive/nudge)"
+      - "Did NOT give a generic 'you're doing great' without data"
+  - user: "What should I focus on for the last 4 days?"
+    rubric:
+      - "Referenced the specific remaining days (4 of 14)"
+      - "Kept recommendation tied to the anchor habit"
+      - "Used actual data to justify the recommendation"
+      - "Did NOT introduce new habits this close to completion"

@@ -2044,6 +2044,23 @@ def _get_person_context(person_id: str | None = None, user_id: str | None = None
     return context
 
 
+
+
+# =====================================================================
+# Family summary (Kasane person habits/check-ins digest)
+# =====================================================================
+
+def _get_family_summary(person_id: str) -> dict:
+    """Generate a family-friendly summary of a person's habits, check-ins, and health data.
+
+    Queries the Kasane SQLite database for the given person and returns a structured
+    summary including habit statuses, streak info, recent notes, and health metrics.
+    Suitable for email digests or proactive coaching conversations.
+    """
+    from engine.coaching.family_summary import generate_family_summary
+    return generate_family_summary(person_id)
+
+
 # =====================================================================
 # Tool registry for HTTP API access
 # =====================================================================
@@ -2086,6 +2103,7 @@ TOOL_REGISTRY = {
     "connect_whoop": _connect_whoop,
     "ingest_health_snapshot": _ingest_health_snapshot,
     "get_person_context": _get_person_context,
+    "get_family_summary": _get_family_summary,
     # Excluded from HTTP: auth_garmin (interactive), auth_oura (interactive),
     # auth_whoop (interactive), open_dashboard (browser)
 }
@@ -2415,6 +2433,12 @@ def register_tools(mcp: FastMCP):
         """Get unified coaching context for a person: profile, habits, check-ins from Kasane + health metrics from CSVs. Look up by person_id (Kasane UUID) or user_id (health-engine user like 'default'). Returns merged dict for full coaching context."""
         return _get_person_context(person_id, user_id)
 
+
+
+    @mcp.tool()
+    def get_family_summary(person_id: str) -> dict:
+        """Get a daily digest summary of a person's habits, check-ins, streaks, and health data. Use for family members who want updates on their loved one's progress. Pass the person_id (Kasane UUID) to generate the summary."""
+        return _get_family_summary(person_id)
 
 def register_resources(mcp: FastMCP):
     """Register MCP resources (readable documents)."""
