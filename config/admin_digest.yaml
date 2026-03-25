@@ -1,0 +1,18 @@
+# Admin digest configuration
+# Used by scripts/admin_digest.py
+
+recipients:
+  - name: Andrew
+    user_id: andrew
+    role: admin
+
+delivery:
+  channel: stdout  # stdout | telegram
+  # Telegram requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID env vars
+
+schedule:
+  # To be added as openclaw cron job:
+  # openclaw cron add --name "admin-digest" --schedule "0 7 * * *" --command "python3 scripts/admin_digest.py --telegram"
+  time: "07:00"
+  timezone: "America/Los_Angeles"
+  note: "Run daily at 7am PT. Add to openclaw cron when ready."
