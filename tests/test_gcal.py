@@ -239,7 +239,7 @@ def test_calendar_list_events_tool(mock_list):
     from mcp_server.tools import _calendar_list_events
 
     mock_list.return_value = [{"id": "e1", "summary": "Test"}]
-    result = _calendar_list_events(max_results=5)
+    result = _calendar_list_events(max_results=5, user_id="test_user")
     assert result["count"] == 1
     assert result["events"][0]["summary"] == "Test"
 
@@ -253,6 +253,7 @@ def test_calendar_create_event_tool(mock_create):
         summary="Lab retest",
         start="2026-06-26T09:00:00",
         end="2026-06-26T09:30:00",
+        user_id="test_user",
     )
     assert result["created"] is True
     assert result["event"]["summary"] == "Lab retest"
@@ -263,6 +264,6 @@ def test_calendar_search_events_tool(mock_search):
     from mcp_server.tools import _calendar_search_events
 
     mock_search.return_value = [{"id": "e1", "summary": "Training"}]
-    result = _calendar_search_events(query="Training")
+    result = _calendar_search_events(query="Training", user_id="test_user")
     assert result["count"] == 1
     assert result["events"][0]["summary"] == "Training"

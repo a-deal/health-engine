@@ -875,7 +875,9 @@ def _auth_oura(user_id: str | None = None) -> dict:
             "error": "Oura OAuth not configured. Add oura.client_id and oura.client_secret to gateway.yaml.",
         }
 
-    uid = user_id or "default"
+    uid = user_id
+    if not uid:
+        return {"error": "user_id is required."}
     return run_auth_flow(
         client_id=client_id,
         client_secret=client_secret,
@@ -887,7 +889,9 @@ def _pull_oura(history: bool = False, user_id: str | None = None) -> dict:
     """Pull health metrics from Oura Ring API."""
     from engine.integrations.oura import OuraClient
 
-    uid = user_id or "default"
+    uid = user_id
+    if not uid:
+        return {"error": "user_id is required."}
     config = _load_config(user_id)
     data_dir_path = str(_data_dir(uid)) if uid and uid != "default" else config.get("data_dir", "./data")
 
@@ -925,7 +929,9 @@ def _connect_oura(user_id: str | None = None) -> dict:
     """Check Oura connection status."""
     from engine.integrations.oura import OuraClient
 
-    uid = user_id or "default"
+    uid = user_id
+    if not uid:
+        return {"error": "user_id is required."}
     has_tokens = OuraClient.has_tokens(user_id=uid)
 
     data_dir = _data_dir(uid)
@@ -968,7 +974,9 @@ def _auth_whoop(user_id: str | None = None) -> dict:
             "error": "WHOOP OAuth not configured. Add whoop.client_id and whoop.client_secret to gateway.yaml.",
         }
 
-    uid = user_id or "default"
+    uid = user_id
+    if not uid:
+        return {"error": "user_id is required."}
     return run_auth_flow(
         client_id=client_id,
         client_secret=client_secret,
@@ -980,7 +988,9 @@ def _pull_whoop(history: bool = False, user_id: str | None = None) -> dict:
     """Pull health metrics from WHOOP API."""
     from engine.integrations.whoop import WhoopClient
 
-    uid = user_id or "default"
+    uid = user_id
+    if not uid:
+        return {"error": "user_id is required."}
     config = _load_config(user_id)
     data_dir_path = str(_data_dir(uid)) if uid and uid != "default" else config.get("data_dir", "./data")
 
@@ -1018,7 +1028,9 @@ def _connect_whoop(user_id: str | None = None) -> dict:
     """Check WHOOP connection status."""
     from engine.integrations.whoop import WhoopClient
 
-    uid = user_id or "default"
+    uid = user_id
+    if not uid:
+        return {"error": "user_id is required."}
     has_tokens = WhoopClient.has_tokens(user_id=uid)
 
     data_dir = _data_dir(uid)
@@ -1045,7 +1057,9 @@ def _connect_whoop(user_id: str | None = None) -> dict:
     }
 
 
-def _connect_wearable(service: str, user_id: str = "default") -> dict:
+def _connect_wearable(service: str, user_id: str | None = None) -> dict:
+    if not user_id:
+        return {"error": "user_id is required. Pass the user_id for the person you are connecting a wearable for."}
     if service in ("apple_health", "apple_watch", "apple"):
         install_url = "https://www.icloud.com/shortcuts/b0c11b2912c1434fad4a2d87f4d2a762"
         return {
@@ -1108,7 +1122,9 @@ def _connect_wearable(service: str, user_id: str = "default") -> dict:
     }
 
 
-def _connect_google_calendar(user_id: str = "default") -> dict:
+def _connect_google_calendar(user_id: str | None = None) -> dict:
+    if not user_id:
+        return {"error": "user_id is required."}
     """Generate a tappable OAuth link for connecting Google Calendar."""
     from engine.gateway.config import load_gateway_config
     from engine.gateway.token_store import TokenStore
@@ -1355,7 +1371,9 @@ def _setup_profile(
     }
 
 
-def _check_engagement(user_id: str = "default") -> dict:
+def _check_engagement(user_id: str | None = None) -> dict:
+    if not user_id:
+        return {"error": "user_id is required."}
     data_dir = _data_dir(user_id)
     nudge_path = data_dir / "nudge_state.json"
 
@@ -1561,7 +1579,9 @@ def _calendar_list_events(
     """List upcoming calendar events."""
     from engine.integrations.gcal import GoogleCalendarClient
 
-    client = GoogleCalendarClient(user_id=user_id or "default")
+    if not user_id:
+        return {"error": "user_id is required."}
+    client = GoogleCalendarClient(user_id=user_id)
     events = client.list_events(
         time_min=time_min,
         time_max=time_max,
@@ -1584,7 +1604,9 @@ def _calendar_create_event(
     """Create a new calendar event."""
     from engine.integrations.gcal import GoogleCalendarClient
 
-    client = GoogleCalendarClient(user_id=user_id or "default")
+    if not user_id:
+        return {"error": "user_id is required."}
+    client = GoogleCalendarClient(user_id=user_id)
     event = client.create_event(
         summary=summary,
         start=start,
@@ -1607,7 +1629,9 @@ def _calendar_search_events(
     """Search calendar events by text query."""
     from engine.integrations.gcal import GoogleCalendarClient
 
-    client = GoogleCalendarClient(user_id=user_id or "default")
+    if not user_id:
+        return {"error": "user_id is required."}
+    client = GoogleCalendarClient(user_id=user_id)
     events = client.search_events(
         query=query,
         time_min=time_min,
@@ -2278,7 +2302,7 @@ def register_tools(mcp: FastMCP):
         return _connect_whoop(user_id)
 
     @mcp.tool()
-    def connect_wearable(service: str, user_id: str = "default") -> dict:
+    def connect_wearable(service: str, user_id: str | None = None) -> dict:
         """Get connection instructions for a wearable device.
         For OAuth services (garmin, oura, whoop): returns a tappable auth link.
         For Apple Health/Apple Watch: returns iOS Shortcuts setup instructions.
@@ -2290,7 +2314,7 @@ def register_tools(mcp: FastMCP):
         return _connect_wearable(service, user_id)
 
     @mcp.tool()
-    def connect_google_calendar(user_id: str = "default") -> dict:
+    def connect_google_calendar(user_id: str | None = None) -> dict:
         """Get a tappable OAuth link for connecting Google Calendar.
         The user opens this link on their phone, authorizes with Google,
         and tokens are saved automatically. No credentials touch our server.
@@ -2366,7 +2390,7 @@ def register_tools(mcp: FastMCP):
         )
 
     @mcp.tool()
-    def check_engagement(user_id: str = "default") -> dict:
+    def check_engagement(user_id: str | None = None) -> dict:
         """Check if a user has engaged after onboarding. Returns engagement status,
         days since onboarding, nudge history, and recommended next action.
         Used by the follow-up nudge system to decide what to send."""
