@@ -51,6 +51,13 @@ def create_app() -> FastAPI:
     # Register v1 routes
     register_v1_routes(app)
 
+    # Register legacy /api/{tool_name} routes (used by Milo MCP tools)
+    from engine.gateway.api import api_handler, api_list_tools, api_job_status
+    app.get('/api/tools')(api_list_tools)
+    app.get('/api/job_status')(api_job_status)
+    app.get('/api/{tool_name}')(api_handler)
+    app.post('/api/{tool_name}')(api_handler)
+
     # Initialize database
     init_db()
 

@@ -108,7 +108,13 @@ class GarminClient:
         return True
 
     def connect(self):
-        """Authenticate with Garmin Connect."""
+        """Authenticate with Garmin Connect.
+
+        Token refresh strategy (never hits SSO from cron):
+        1. Load cached tokens
+        2. If access token expired but refresh token valid, refresh locally
+        3. If refresh token also expired, raise -- require interactive re-auth
+        """
         from garminconnect import Garmin
 
         # Try cached tokens first
@@ -116,6 +122,19 @@ class GarminClient:
             try:
                 client = Garmin()
                 client.garth.load(str(self.token_dir))
+
+                # Check token expiry before making any network calls
+                if hasattr(client.garth, "oauth2_token") and client.garth.oauth2_token:
+                    if client.garth.oauth2_token.refresh_expired:
+                        raise RuntimeError(
+                            "Refresh token expired. Run `python3 cli.py auth garmin` to re-authenticate."
+                        )
+                    if client.garth.oauth2_token.expired:
+                        print("Access token expired, refreshing via refresh token...", file=sys.stderr)
+                        client.garth.refresh_oauth2()
+                        client.garth.dump(str(self.token_dir))
+                        print("Token refreshed successfully.")
+
                 dn = (client.garth.profile.get("displayName")
                       or client.garth.profile.get("userName")
                       or client.garth.profile.get("profileId"))
@@ -123,13 +142,19 @@ class GarminClient:
                     client.display_name = dn
                 else:
                     raise RuntimeError("No display name in cached profile")
-                # Re-dump tokens so any garth auto-refresh is persisted to disk
+                # Persist any token changes from auto-refresh
                 client.garth.dump(str(self.token_dir))
                 print("Authenticated with cached token.")
                 self._client = client
                 return client
             except Exception as e:
-                print(f"Cached token load failed: {e}", file=sys.stderr)
+                print(f"Cached token auth failed: {e}", file=sys.stderr)
+                # Never fall through to SSO login from automated context.
+                # That causes rate limits. Require interactive re-auth.
+                if not self.email or not self.password:
+                    raise RuntimeError(
+                        f"Token auth failed: {e}. Run `python3 cli.py auth garmin` to re-authenticate."
+                    ) from e
 
         if not self.email or not self.password:
             raise RuntimeError(
