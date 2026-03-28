@@ -21,6 +21,7 @@ from engine.insights.coaching import (
 from engine.insights.patterns import detect_patterns, summarize_patterns
 from engine.tracking.weight import rolling_average, weekly_rate, projected_date, rate_assessment
 from engine.scoring.rolling import compute_rolling, compute_rolling_from_csv, compute_protein_rolling
+from engine.scoring.alerts import check_alerts
 from engine.tracking.nutrition import remaining_to_hit, daily_totals, protein_check
 from engine.tracking.strength import est_1rm, progression_summary
 from engine.tracking.habits import streak, gap_analysis
@@ -535,6 +536,25 @@ def build_briefing(config: dict) -> dict:
 
     if horizons:
         briefing["horizons"] = horizons
+
+    # --- Alerts (Phase 2 of timescale framework) ---
+    # Check rolling averages and daily series for threshold breaches.
+    # Milo addresses these before discussing anything else.
+    garmin_today_data = None
+    garmin_today_path = data_dir / "garmin_today.json"
+    if garmin_today_path.exists():
+        garmin_today_data = _load_json(garmin_today_path)
+
+    alerts = check_alerts(
+        daily_series=daily_series,
+        weight_data=weights_data,
+        habit_data=habit_data,
+        garmin_today=garmin_today_data,
+        horizons=horizons,
+        targets=targets,
+    )
+    if alerts:
+        briefing["alerts"] = alerts
 
     return briefing
 
