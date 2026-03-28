@@ -20,6 +20,7 @@ from engine.insights.coaching import (
 )
 from engine.insights.patterns import detect_patterns, summarize_patterns
 from engine.tracking.weight import rolling_average, weekly_rate, projected_date, rate_assessment
+from engine.scoring.rolling import compute_rolling, compute_rolling_from_csv, compute_protein_rolling
 from engine.tracking.nutrition import remaining_to_hit, daily_totals, protein_check
 from engine.tracking.strength import est_1rm, progression_summary
 from engine.tracking.habits import streak, gap_analysis
@@ -501,6 +502,39 @@ def build_briefing(config: dict) -> dict:
 
     if coaching_signals:
         briefing["coaching_signals"] = coaching_signals
+
+    # --- Multi-timescale horizons (Phase 1 of timescale framework) ---
+    # Gives Milo context beyond single-day values. Each metric shows
+    # today's value, 7-day avg, 30-day avg, and week-over-week trend.
+    horizons = {}
+
+    # Weight horizons (from weight_log.csv)
+    if weights_data and len(weights_data) >= 2:
+        horizons["weight"] = compute_rolling(
+            weights_data, value_key="weight", windows=(7, 30)
+        )
+
+    # Wearable horizons (from garmin_daily.json 90-day series)
+    if daily_series and isinstance(daily_series, list) and len(daily_series) >= 3:
+        for metric_key, label in [
+            ("rhr", "resting_hr"),
+            ("hrv", "hrv_rmssd"),
+            ("sleep_hrs", "sleep_duration"),
+            ("steps", "steps"),
+        ]:
+            result = compute_rolling(daily_series, value_key=metric_key, windows=(7, 30))
+            if result:
+                horizons[label] = result
+
+    # Protein horizons (from meal_log.csv, all dates)
+    all_meals = read_csv(data_dir / "meal_log.csv") if (data_dir / "meal_log.csv").exists() else None
+    if all_meals:
+        protein_horizons = compute_protein_rolling(all_meals, windows=(7, 30))
+        if protein_horizons:
+            horizons["protein_g"] = protein_horizons
+
+    if horizons:
+        briefing["horizons"] = horizons
 
     return briefing
 
