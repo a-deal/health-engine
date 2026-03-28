@@ -1,0 +1,193 @@
+# Condition-specific coaching modifiers.
+# Maps health conditions to alert interpretation changes, additional
+# metrics to prioritize, and retest cadence overrides.
+#
+# Milo reads coaching_context strings alongside alerts to adapt
+# its response. The clinical knowledge lives here, not in the prompt.
+#
+# REGULATORY NOTE: We surface data and coach habits. We never diagnose,
+# prescribe, or recommend treatment changes. When condition-relevant
+# signals fire, always include "talk to your doctor" language.
+
+type_2_diabetes:
+  display_name: "type 2 diabetes"
+  onboarding_cue: "blood sugar management"
+  alert_modifiers:
+    sleep_debt:
+      coaching_context: "Sleep debt increases insulin resistance within days. For someone managing blood sugar, this is higher priority than for most users. Push hard on the sleep fix."
+    weight_plateau:
+      coaching_context: "Some diabetes medications affect appetite and water retention. A plateau may be medication-related, not a compliance issue. Ask about recent medication changes before adjusting calories."
+    resting_hr:
+      coaching_context: "Autonomic neuropathy can develop over time with diabetes and may mask or alter RHR signals. Cross-reference with glucose trends if available."
+    habit_dropoff:
+      coaching_context: "Blood sugar swings affect energy and willpower. If habits are slipping, check if glucose management is also off. Address the root cause, not the symptom."
+  additional_primary_metrics:
+    - fasting_glucose
+    - hba1c
+    - fasting_insulin
+  retest_cadence_override:
+    hba1c: 3
+    fasting_glucose: 3
+    fasting_insulin: 3
+  doctor_referral_triggers:
+    - "fasting glucose consistently above 180"
+    - "HbA1c above 8.0"
+    - "significant unexplained weight change"
+
+type_1_diabetes:
+  display_name: "type 1 diabetes"
+  onboarding_cue: "blood sugar management"
+  alert_modifiers:
+    sleep_debt:
+      coaching_context: "Sleep disruption affects insulin sensitivity and glucose variability. Prioritize sleep stability."
+    resting_hr:
+      coaching_context: "Cardiac autonomic neuropathy is more common in T1D. RHR trends are still useful but the baseline may be higher than population norms."
+  additional_primary_metrics:
+    - fasting_glucose
+    - hba1c
+  retest_cadence_override:
+    hba1c: 3
+  doctor_referral_triggers:
+    - "recurrent hypoglycemia patterns detected"
+    - "HbA1c above 8.0"
+
+hashimotos:
+  display_name: "Hashimoto's thyroiditis"
+  onboarding_cue: "thyroid issues"
+  alert_modifiers:
+    sleep_debt:
+      coaching_context: "Hypothyroidism causes fatigue independent of sleep. If sleep duration is adequate but energy is still low, thyroid levels may need rechecking."
+    weight_plateau:
+      coaching_context: "Thyroid function directly affects metabolic rate. A plateau in someone with Hashimoto's may indicate TSH is drifting. Check when TSH was last drawn."
+    hrv_suppression:
+      coaching_context: "Hypothyroid states suppress HRV. If HRV is chronically low despite good sleep and recovery, thyroid function should be verified."
+    resting_hr:
+      coaching_context: "Hypothyroidism lowers RHR. A rising RHR in someone with Hashimoto's could indicate improving thyroid function (good) or overmedication (check with doctor)."
+  additional_primary_metrics:
+    - tsh
+    - ferritin
+  retest_cadence_override:
+    tsh: 3
+    ferritin: 6
+  doctor_referral_triggers:
+    - "TSH above 4.0 or below 0.4"
+    - "significant fatigue despite adequate sleep for 2+ weeks"
+
+hypothyroidism:
+  display_name: "hypothyroidism"
+  onboarding_cue: "thyroid issues"
+  # Same modifiers as hashimotos
+  inherits: hashimotos
+
+hyperthyroidism:
+  display_name: "hyperthyroidism"
+  onboarding_cue: "thyroid issues"
+  alert_modifiers:
+    resting_hr:
+      coaching_context: "Hyperthyroidism elevates RHR. A sustained high RHR may be thyroid-driven, not training-related. Do not recommend more rest if thyroid is the cause."
+    hrv_suppression:
+      coaching_context: "Sympathetic overdrive from hyperthyroidism suppresses HRV. This is expected and will improve with treatment."
+    sleep_debt:
+      coaching_context: "Hyperthyroidism causes insomnia and restlessness. Sleep interventions may have limited effect until thyroid is controlled."
+  additional_primary_metrics:
+    - tsh
+  retest_cadence_override:
+    tsh: 2
+  doctor_referral_triggers:
+    - "TSH below 0.1"
+    - "resting HR consistently above 100"
+
+pcos:
+  display_name: "PCOS"
+  onboarding_cue: "hormonal health"
+  alert_modifiers:
+    weight_plateau:
+      coaching_context: "PCOS creates insulin resistance that makes weight loss harder. A slower rate (0.25-0.5%/week) may be realistic. Don't push aggressive deficits."
+    sleep_debt:
+      coaching_context: "Sleep apnea is common with PCOS. If sleep duration is adequate but quality metrics are poor, consider a sleep study referral."
+  additional_primary_metrics:
+    - fasting_insulin
+    - fasting_glucose
+    - testosterone_total
+  retest_cadence_override:
+    fasting_insulin: 3
+    testosterone_total: 6
+  doctor_referral_triggers:
+    - "fasting insulin rising despite lifestyle changes"
+
+depression:
+  display_name: "depression"
+  onboarding_cue: "mental health"
+  alert_modifiers:
+    habit_dropoff:
+      coaching_context: "Habit compliance drops are expected during depressive episodes. Do not frame as failure. Reduce to the minimum viable habit. One thing, done imperfectly, still counts."
+    sleep_debt:
+      coaching_context: "Depression disrupts sleep in both directions (insomnia or hypersomnia). Track sleep regularity, not just duration. A consistent wake time matters more than total hours."
+    hrv_suppression:
+      coaching_context: "Depression chronically suppresses HRV via autonomic dysregulation. Low HRV in this context is expected. Focus coaching on the modifiable inputs (sleep, movement, sunlight) rather than the HRV number itself."
+  additional_primary_metrics: []
+  retest_cadence_override: {}
+  doctor_referral_triggers:
+    - "sustained mood/energy decline for 2+ weeks"
+    - "self-reported worsening despite good sleep and activity"
+
+anxiety:
+  display_name: "anxiety"
+  onboarding_cue: "mental health"
+  alert_modifiers:
+    resting_hr:
+      coaching_context: "Anxiety elevates RHR via sympathetic activation. An elevated RHR without other recovery signals (poor sleep, overtraining) may be anxiety-driven."
+    hrv_suppression:
+      coaching_context: "Chronic anxiety suppresses HRV. Breathwork and vagal tone exercises (cold exposure, slow breathing) have evidence for improving HRV in anxious populations."
+  additional_primary_metrics: []
+  doctor_referral_triggers:
+    - "persistent elevated RHR + self-reported anxiety for 2+ weeks"
+
+sleep_apnea:
+  display_name: "sleep apnea"
+  onboarding_cue: "sleep issues"
+  alert_modifiers:
+    sleep_debt:
+      coaching_context: "Sleep apnea means total sleep time overstates restorative sleep. Even 8 hours may not be enough if apnea fragments it. CPAP compliance is the #1 lever."
+    resting_hr:
+      coaching_context: "Untreated sleep apnea elevates RHR via nocturnal hypoxemia. If on CPAP, RHR should normalize. If RHR stays elevated, check CPAP compliance and mask fit."
+    hrv_suppression:
+      coaching_context: "Apnea events spike sympathetic activity overnight, suppressing HRV. CPAP typically improves HRV within 2-4 weeks of consistent use."
+  additional_primary_metrics: []
+  doctor_referral_triggers:
+    - "SpO2 desaturation events detected on wearable"
+    - "persistent daytime fatigue despite adequate sleep hours"
+
+hypertension:
+  display_name: "high blood pressure"
+  onboarding_cue: "blood pressure"
+  alert_modifiers:
+    resting_hr:
+      coaching_context: "Beta blockers lower RHR artificially. If on a beta blocker, RHR trends are less meaningful for recovery assessment. Use HRV instead."
+    weight_plateau:
+      coaching_context: "Some antihypertensives cause water retention. A 2-3 lb plateau after starting or changing BP medication may be water, not fat."
+  additional_primary_metrics: []
+  retest_cadence_override: {}
+  doctor_referral_triggers:
+    - "systolic consistently above 140 or diastolic above 90"
+    - "significant BP increase from baseline"
+
+iron_deficiency:
+  display_name: "iron deficiency"
+  onboarding_cue: "energy or blood work"
+  alert_modifiers:
+    resting_hr:
+      coaching_context: "Iron deficiency elevates RHR as the heart compensates for reduced oxygen-carrying capacity. RHR should normalize as ferritin improves."
+    hrv_suppression:
+      coaching_context: "Low iron can suppress HRV. If HRV is chronically low and ferritin is below 30, iron supplementation is likely the highest-leverage intervention."
+    sleep_debt:
+      coaching_context: "Iron deficiency causes fatigue and restless legs, both of which disrupt sleep. Address iron first, then optimize sleep hygiene."
+  additional_primary_metrics:
+    - ferritin
+    - hemoglobin
+  retest_cadence_override:
+    ferritin: 3
+    hemoglobin: 3
+  doctor_referral_triggers:
+    - "ferritin below 15"
+    - "hemoglobin below reference range"

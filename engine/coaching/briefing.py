@@ -23,6 +23,11 @@ from engine.tracking.weight import rolling_average, weekly_rate, projected_date,
 from engine.scoring.rolling import compute_rolling, compute_rolling_from_csv, compute_protein_rolling
 from engine.scoring.alerts import check_alerts
 from engine.scoring.acwr import compute_acwr, build_session_list, acwr_alert
+from engine.scoring.conditions import (
+    get_user_conditions, enrich_alerts_with_conditions,
+    get_condition_primary_metrics, get_condition_retest_overrides,
+    get_condition_doctor_triggers,
+)
 from engine.scoring.lab_trends import compute_lab_trends
 from engine.scoring.disclosure import (
     get_tenure_days, get_tenure_tier, resolve_outcome,
@@ -589,6 +594,20 @@ def build_briefing(config: dict) -> dict:
             acwr_alerts = acwr_alert(acwr_result)
             if acwr_alerts:
                 alerts.extend(acwr_alerts)
+
+        # --- Condition-Aware Coaching ---
+    user_conditions = get_user_conditions(config)
+    if user_conditions:
+        # Enrich alerts with condition-specific coaching context
+        alerts = enrich_alerts_with_conditions(alerts, user_conditions)
+
+        # Add condition metadata to briefing
+        briefing["conditions"] = {
+            "active": [c.get("type") for c in user_conditions],
+            "additional_primary_metrics": list(get_condition_primary_metrics(user_conditions)),
+            "retest_overrides": get_condition_retest_overrides(user_conditions),
+            "doctor_triggers": get_condition_doctor_triggers(user_conditions),
+        }
 
         # --- Progressive Disclosure (Phase 3 of timescale framework) ---
     # Filter horizons and alerts by user tenure and selected outcome.
