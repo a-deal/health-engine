@@ -22,6 +22,7 @@ from engine.insights.patterns import detect_patterns, summarize_patterns
 from engine.tracking.weight import rolling_average, weekly_rate, projected_date, rate_assessment
 from engine.scoring.rolling import compute_rolling, compute_rolling_from_csv, compute_protein_rolling
 from engine.scoring.alerts import check_alerts
+from engine.scoring.acwr import compute_acwr, build_session_list, acwr_alert
 from engine.scoring.disclosure import (
     get_tenure_days, get_tenure_tier, resolve_outcome,
     filter_horizons, filter_alerts,
@@ -557,7 +558,28 @@ def build_briefing(config: dict) -> dict:
         horizons=horizons,
         targets=targets,
     )
-    # --- Progressive Disclosure (Phase 3 of timescale framework) ---
+    # --- ACWR Training Load (Phase 4 of timescale framework) ---
+    garmin_workouts_data = _load_json(data_dir / "garmin_workouts.json")
+    strength_log_data = _load_strength_log(data_dir, config)
+    session_log_path = data_dir / "session_log.csv"
+    session_log_data = read_csv(session_log_path) if session_log_path.exists() else None
+
+    sessions = build_session_list(
+        garmin_workouts=garmin_workouts_data if isinstance(garmin_workouts_data, list) else None,
+        strength_log=strength_log_data,
+        session_log=session_log_data,
+    )
+
+    if sessions:
+        acwr_result = compute_acwr(sessions)
+        if acwr_result:
+            briefing["training"] = acwr_result
+            # Add ACWR alerts to the alerts list
+            acwr_alerts = acwr_alert(acwr_result)
+            if acwr_alerts:
+                alerts.extend(acwr_alerts)
+
+        # --- Progressive Disclosure (Phase 3 of timescale framework) ---
     # Filter horizons and alerts by user tenure and selected outcome.
     tenure_days = get_tenure_days(data_dir)
     tenure_tier = get_tenure_tier(tenure_days)

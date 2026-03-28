@@ -73,11 +73,11 @@ OUTCOME_METRICS = {
 OUTCOME_ALERT_METRICS = {
     "sleep_better": {"sleep_duration", "sleep_regularity", "hrv_rmssd", "resting_hr", "habit", "body_battery"},
     "lose_weight": {"weight", "sleep_duration", "habit", "resting_hr", "hrv_rmssd", "body_battery"},
-    "build_strength": {"hrv_rmssd", "resting_hr", "habit", "body_battery", "sleep_duration", "weight"},
+    "build_strength": {"hrv_rmssd", "resting_hr", "habit", "body_battery", "sleep_duration", "weight", "training_load"},
     "more_energy": {"sleep_duration", "hrv_rmssd", "resting_hr", "body_battery", "habit", "sleep_regularity"},
     "less_stress": {"hrv_rmssd", "sleep_duration", "resting_hr", "body_battery", "habit", "sleep_regularity"},
     "eat_healthier": {"weight", "habit", "sleep_duration"},
-    "general": {"sleep_duration", "sleep_regularity", "hrv_rmssd", "resting_hr", "weight", "habit", "body_battery"},
+    "general": {"sleep_duration", "sleep_regularity", "hrv_rmssd", "resting_hr", "weight", "habit", "body_battery", "training_load"},
 }
 
 

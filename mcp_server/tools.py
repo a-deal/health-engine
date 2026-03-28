@@ -448,6 +448,35 @@ def _log_sleep(bed_time: str, wake_time: str, date: str | None = None, user_id: 
     return _log_habits({"bed_time": bed_time, "wake_time": wake_time}, date, user_id=user_id)
 
 
+def _log_session(
+    rpe: float,
+    duration_min: float | None = None,
+    session_type: str = "training",
+    name: str = "",
+    date: str | None = None,
+    user_id: str | None = None,
+) -> dict:
+    """Log a training session RPE. Merges with Garmin workout data if available."""
+    date = date or datetime.now().strftime("%Y-%m-%d")
+    data_dir = _data_dir(user_id)
+    path = data_dir / "session_log.csv"
+    fieldnames = ["date", "rpe", "duration_min", "type", "name", "notes"]
+
+    if rpe < 1 or rpe > 10:
+        return {"error": "RPE must be between 1 and 10"}
+
+    new_row = {
+        "date": date,
+        "rpe": str(rpe),
+        "duration_min": str(duration_min) if duration_min else "",
+        "type": session_type,
+        "name": name,
+        "notes": "",
+    }
+    append_csv(path, new_row, fieldnames=fieldnames)
+    return {"logged": True, "date": date, "rpe": rpe, "duration_min": duration_min, "type": session_type}
+
+
 def _log_meal(
     description: str,
     protein_g: float,
@@ -2129,6 +2158,7 @@ TOOL_REGISTRY = {
     "log_medication": _log_medication,
     "get_status": _get_status,
     "onboard": _onboard,
+    "log_session": _log_session,
     "pull_garmin": _pull_garmin,
     "connect_garmin": _connect_garmin,
     "connect_wearable": _connect_wearable,
@@ -2243,6 +2273,12 @@ def register_tools(mcp: FastMCP):
     ) -> dict:
         """Log a medication or injection (e.g. tirzepatide 2.5mg subcutaneous). Tracks dose changes over time. Route examples: oral, subcutaneous, intramuscular, topical. Date defaults to today."""
         return _log_medication(name, dose, route, notes, date, user_id)
+
+
+    @mcp.tool()
+    def log_session(rpe: float, duration_min: float | None = None, session_type: str = "training", name: str = "", date: str | None = None, user_id: str | None = None) -> dict:
+        """Log a training session RPE (1-10 scale). Call after any workout. Merges with Garmin data for ACWR computation. If Garmin captured the workout, you only need the RPE. Duration is optional (Garmin provides it)."""
+        return _log_session(rpe, duration_min, session_type, name, date, user_id)
 
     @mcp.tool()
     def get_status(user_id: str | None = None) -> dict:
