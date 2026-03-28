@@ -22,6 +22,10 @@ from engine.insights.patterns import detect_patterns, summarize_patterns
 from engine.tracking.weight import rolling_average, weekly_rate, projected_date, rate_assessment
 from engine.scoring.rolling import compute_rolling, compute_rolling_from_csv, compute_protein_rolling
 from engine.scoring.alerts import check_alerts
+from engine.scoring.disclosure import (
+    get_tenure_days, get_tenure_tier, resolve_outcome,
+    filter_horizons, filter_alerts,
+)
 from engine.tracking.nutrition import remaining_to_hit, daily_totals, protein_check
 from engine.tracking.strength import est_1rm, progression_summary
 from engine.tracking.habits import streak, gap_analysis
@@ -553,8 +557,23 @@ def build_briefing(config: dict) -> dict:
         horizons=horizons,
         targets=targets,
     )
+    # --- Progressive Disclosure (Phase 3 of timescale framework) ---
+    # Filter horizons and alerts by user tenure and selected outcome.
+    tenure_days = get_tenure_days(data_dir)
+    tenure_tier = get_tenure_tier(tenure_days)
+    outcome = resolve_outcome(config)
+
+    briefing["disclosure"] = {
+        "tenure_days": tenure_days,
+        "tenure_tier": tenure_tier,
+        "outcome": outcome,
+    }
+
+    if horizons:
+        briefing["horizons"] = filter_horizons(horizons, outcome, tenure_tier)
+
     if alerts:
-        briefing["alerts"] = alerts
+        briefing["alerts"] = filter_alerts(alerts, outcome, tenure_tier)
 
     return briefing
 
