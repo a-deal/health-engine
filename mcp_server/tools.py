@@ -48,19 +48,16 @@ def _resolve_person_id(user_id: str | None = None) -> str | None:
     Returns the person_id or None if no matching record exists.
     Used by tools that dual-write to CSV + SQLite during migration.
     """
+    if not user_id:
+        return None
     try:
         from engine.gateway.db import get_db, init_db
         init_db()
         db = get_db()
-        if user_id:
-            row = db.execute(
-                "SELECT id FROM person WHERE health_engine_user_id = ? AND deleted_at IS NULL",
-                (user_id,),
-            ).fetchone()
-        else:
-            row = db.execute(
-                "SELECT id FROM person WHERE health_engine_user_id = 'andrew' AND deleted_at IS NULL"
-            ).fetchone()
+        row = db.execute(
+            "SELECT id FROM person WHERE health_engine_user_id = ? AND deleted_at IS NULL",
+            (user_id,),
+        ).fetchone()
         return row["id"] if row else None
     except Exception:
         return None
@@ -96,6 +93,31 @@ def _latest_bp_sqlite(person_id: str | None) -> tuple[float, float] | None:
             (person_id,),
         ).fetchone()
         return (row["systolic"], row["diastolic"]) if row else None
+    except Exception:
+        return None
+
+
+def _latest_labs_sqlite(person_id: str | None) -> dict | None:
+    """Get latest lab values from SQLite. Returns dict of {marker: value} or None."""
+    if not person_id:
+        return None
+    try:
+        from engine.gateway.db import get_db, init_db
+        init_db()
+        db = get_db()
+        rows = db.execute(
+            "SELECT lr.marker, lr.value, lr.value_text, ld.date "
+            "FROM lab_result lr JOIN lab_draw ld ON lr.draw_id = ld.id "
+            "WHERE lr.person_id = ? ORDER BY ld.date DESC",
+            (person_id,),
+        ).fetchall()
+        if not rows:
+            return None
+        latest = {}
+        for r in rows:
+            if r["marker"] not in latest:
+                latest[r["marker"]] = r["value"] if r["value"] is not None else r["value_text"]
+        return latest
     except Exception:
         return None
 
@@ -328,26 +350,50 @@ def _score(user_id: str | None = None) -> dict:
     # Load lab results for scoring + clinical zones
     metric_dates = {}
     metric_counts = {}
-    lab_path = data_dir / "lab_results.json"
-    if lab_path.exists():
-        import json as json_mod
-        with open(lab_path) as f:
-            labs = json_mod.load(f)
-        latest = labs.get("latest", {})
+
+    # Try SQLite labs first
+    _sqlite_labs = _latest_labs_sqlite(_pid)
+    if _sqlite_labs:
         for key in ("ldl_c", "hdl_c", "triglycerides", "apob", "fasting_glucose",
                     "hba1c", "fasting_insulin", "hscrp", "alt", "ggt", "tsh",
                     "ferritin", "hemoglobin", "lpa"):
-            val = latest.get(key)
+            val = _sqlite_labs.get(key)
             if val is not None:
                 setattr(profile, key, val)
-        for draw in labs.get("draws", []):
-            draw_date = draw.get("date", "")
-            for key in draw.get("results", {}):
-                if key not in metric_dates:
-                    metric_dates[key] = draw_date
-        for draw in labs.get("draws", []):
-            for key in draw.get("results", {}):
-                metric_counts[key] = metric_counts.get(key, 0) + 1
+        # Get draw dates and counts from SQLite
+        if _pid:
+            from engine.gateway.db import get_db as _gdb2
+            _db2 = _gdb2()
+            _draw_rows = _db2.execute(
+                "SELECT lr.marker, ld.date FROM lab_result lr JOIN lab_draw ld ON lr.draw_id = ld.id "
+                "WHERE lr.person_id = ? ORDER BY ld.date DESC", (_pid,)
+            ).fetchall()
+            for r in _draw_rows:
+                if r["marker"] not in metric_dates:
+                    metric_dates[r["marker"]] = r["date"]
+                metric_counts[r["marker"]] = metric_counts.get(r["marker"], 0) + 1
+    else:
+        # Fallback to JSON
+        lab_path = data_dir / "lab_results.json"
+        if lab_path.exists():
+            import json as json_mod
+            with open(lab_path) as f:
+                labs = json_mod.load(f)
+            latest = labs.get("latest", {})
+            for key in ("ldl_c", "hdl_c", "triglycerides", "apob", "fasting_glucose",
+                        "hba1c", "fasting_insulin", "hscrp", "alt", "ggt", "tsh",
+                        "ferritin", "hemoglobin", "lpa"):
+                val = latest.get(key)
+                if val is not None:
+                    setattr(profile, key, val)
+            for draw in labs.get("draws", []):
+                draw_date = draw.get("date", "")
+                for key in draw.get("results", {}):
+                    if key not in metric_dates:
+                        metric_dates[key] = draw_date
+            for draw in labs.get("draws", []):
+                for key in draw.get("results", {}):
+                    metric_counts[key] = metric_counts.get(key, 0) + 1
 
     # Wearable dates
     if wearable_data:
@@ -681,16 +727,39 @@ def _get_meals(
     from engine.tracking.nutrition import daily_totals, remaining_to_hit
     date = date or datetime.now().strftime("%Y-%m-%d")
     data_dir = _data_dir(user_id)
-    path = data_dir / "meal_log.csv"
-    rows = read_csv(path)
 
+    # Load meals from SQLite first, CSV fallback
+    _pid = _resolve_person_id(user_id)
+    rows = None
+    if _pid:
+        from engine.gateway.db import get_db, init_db
+        init_db()
+        _mdb = get_db()
+        _mrows = _mdb.execute(
+            "SELECT date, meal_num, time_of_day, description, protein_g, carbs_g, fat_g, calories, notes "
+            "FROM meal_entry WHERE person_id = ? ORDER BY date, meal_num", (_pid,)
+        ).fetchall()
+        if _mrows:
+            rows = [dict(r) for r in _mrows]
+    if rows is None:
+        rows = read_csv(data_dir / "meal_log.csv")
+
+    # Load burns from SQLite wearable_daily, JSON fallback
     burn_by_date = {}
-    burn_path = data_dir / "garmin_daily_burn.json"
-    if burn_path.exists():
-        with open(burn_path) as f:
-            burns = json.load(f)
-        for b in burns:
-            burn_by_date[b["date"]] = b
+    if _pid:
+        _brows = _mdb.execute(
+            "SELECT date, calories_total, calories_active, calories_bmr FROM wearable_daily "
+            "WHERE person_id = ? AND calories_total IS NOT NULL", (_pid,)
+        ).fetchall()
+        for b in _brows:
+            burn_by_date[b["date"]] = {"total": b["calories_total"], "active": b["calories_active"], "bmr": b["calories_bmr"]}
+    if not burn_by_date:
+        burn_path = data_dir / "garmin_daily_burn.json"
+        if burn_path.exists():
+            with open(burn_path) as f:
+                burns = json.load(f)
+            for b in burns:
+                burn_by_date[b["date"]] = b
 
     from datetime import timedelta
     end = datetime.strptime(date, "%Y-%m-%d")
@@ -859,17 +928,26 @@ def _onboard(user_id: str | None = None) -> dict:
         if weight_rows and weight_rows[-1].get("weight_lbs", "").strip():
             profile.weight_lbs = float(weight_rows[-1]["weight_lbs"])
 
-    lab_path = data_dir / "lab_results.json"
-    if lab_path.exists():
-        with open(lab_path) as f:
-            labs = json.load(f)
-        latest = labs.get("latest", {})
+    _sqlite_labs2 = _latest_labs_sqlite(_pid)
+    if _sqlite_labs2:
         for key in ("ldl_c", "hdl_c", "triglycerides", "apob", "fasting_glucose",
                     "hba1c", "fasting_insulin", "hscrp", "alt", "ggt", "tsh",
                     "ferritin", "hemoglobin", "lpa"):
-            val = latest.get(key)
+            val = _sqlite_labs2.get(key)
             if val is not None:
                 setattr(profile, key, val)
+    else:
+        lab_path = data_dir / "lab_results.json"
+        if lab_path.exists():
+            with open(lab_path) as f:
+                labs = json.load(f)
+            latest = labs.get("latest", {})
+            for key in ("ldl_c", "hdl_c", "triglycerides", "apob", "fasting_glucose",
+                        "hba1c", "fasting_insulin", "hscrp", "alt", "ggt", "tsh",
+                        "ferritin", "hemoglobin", "lpa"):
+                val = latest.get(key)
+                if val is not None:
+                    setattr(profile, key, val)
 
     output = score_profile(profile)
     total_weight = sum(r.coverage_weight for r in output["results"])
@@ -1771,6 +1849,38 @@ def _log_labs(
 
 
 def _get_labs(user_id: str | None = None) -> dict:
+    # Try SQLite first
+    _pid = _resolve_person_id(user_id)
+    if _pid:
+        from engine.gateway.db import get_db, init_db
+        init_db()
+        db = get_db()
+        draws = db.execute(
+            "SELECT id, date, source, notes FROM lab_draw WHERE person_id = ? ORDER BY date DESC",
+            (_pid,),
+        ).fetchall()
+        if draws:
+            latest = _latest_labs_sqlite(_pid) or {}
+            draw_list = []
+            for d in draws:
+                results = db.execute(
+                    "SELECT marker, value, value_text, unit, flag FROM lab_result WHERE draw_id = ?",
+                    (d["id"],),
+                ).fetchall()
+                draw_list.append({
+                    "date": d["date"],
+                    "source": d["source"],
+                    "results": {r["marker"]: r["value"] if r["value"] is not None else r["value_text"] for r in results},
+                })
+            return {
+                "has_labs": True,
+                "draws": draw_list,
+                "latest": latest,
+                "total_draws": len(draw_list),
+                "total_biomarkers": len(latest),
+            }
+
+    # Fallback to JSON
     data_dir = _data_dir(user_id)
     lab_path = data_dir / "lab_results.json"
     if not lab_path.exists():
@@ -2024,13 +2134,15 @@ def _check_health_priorities_tool(user_id: str | None = None) -> dict:
     profile_cfg = config.get("profile", {})
     intake_cfg = config.get("intake", {})
 
-    # Load labs
-    lab_path = data_dir / "lab_results.json"
-    labs: dict = {}
-    if lab_path.exists():
-        with open(lab_path) as f:
-            lab_data = json.load(f)
-        labs = lab_data.get("latest", {})
+    # Load labs (SQLite first)
+    _pid_hp = _resolve_person_id(user_id)
+    labs = _latest_labs_sqlite(_pid_hp) or {}
+    if not labs:
+        lab_path = data_dir / "lab_results.json"
+        if lab_path.exists():
+            with open(lab_path) as f:
+                lab_data = json.load(f)
+            labs = lab_data.get("latest", {})
 
     # Load latest BP
     bp_systolic = None
@@ -2372,19 +2484,31 @@ def _get_person_context(person_id: str | None = None, user_id: str | None = None
         "latest_focus_plan": dict(fp) if fp else None,
     }
 
-    # Merge CSV health data
+    # Merge health data (SQLite first, CSV fallback)
     he_uid = person.get("health_engine_user_id")
-    if he_uid:
+    health = {}
+
+    # Weight trend (SQLite)
+    weight_rows = db.execute(
+        "SELECT date, weight_lbs, waist_in, source FROM weight_entry "
+        "WHERE person_id = ? ORDER BY date DESC LIMIT 14", (pid,)
+    ).fetchall()
+    if weight_rows:
+        health["weight_recent"] = [dict(r) for r in reversed(weight_rows)]
+    elif he_uid:
+        csv_rows = read_csv(_data_dir(he_uid) / "weight_log.csv")
+        if csv_rows:
+            health["weight_recent"] = csv_rows[-14:]
+
+    # Wearable snapshot (SQLite for latest day, JSON fallback)
+    wearable_row = db.execute(
+        "SELECT * FROM wearable_daily WHERE person_id = ? ORDER BY date DESC LIMIT 1", (pid,)
+    ).fetchone()
+    if wearable_row:
+        health["wearable_snapshot"] = dict(wearable_row)
+        health["wearable_source"] = wearable_row["source"] or "garmin"
+    elif he_uid:
         data_dir = _data_dir(he_uid)
-        health = {}
-
-        # Weight trend
-        weight_path = data_dir / "weight_log.csv"
-        if weight_path.exists():
-            rows = read_csv(weight_path)
-            health["weight_recent"] = rows[-14:] if rows else []
-
-        # Wearable snapshot
         for fname in ("garmin_latest.json", "oura_latest.json", "whoop_latest.json", "apple_health_latest.json"):
             snapshot = _load_json_file(data_dir / fname)
             if snapshot:
@@ -2392,18 +2516,38 @@ def _get_person_context(person_id: str | None = None, user_id: str | None = None
                 health["wearable_source"] = fname.replace("_latest.json", "")
                 break
 
-        # Labs
-        labs = _load_json_file(data_dir / "lab_results.json")
+    # Labs (SQLite)
+    lab_rows = db.execute(
+        "SELECT lr.marker, lr.value, lr.value_text, lr.unit, lr.flag, ld.date "
+        "FROM lab_result lr JOIN lab_draw ld ON lr.draw_id = ld.id "
+        "WHERE lr.person_id = ? ORDER BY ld.date DESC", (pid,)
+    ).fetchall()
+    if lab_rows:
+        # Build latest dict (first occurrence of each marker = most recent)
+        latest_labs = {}
+        for r in lab_rows:
+            if r["marker"] not in latest_labs:
+                latest_labs[r["marker"]] = r["value"] if r["value"] is not None else r["value_text"]
+        health["latest_labs"] = latest_labs
+    elif he_uid:
+        labs = _load_json_file(_data_dir(he_uid) / "lab_results.json")
         if labs and "latest" in labs:
             health["latest_labs"] = labs["latest"]
 
-        # Today's meals
-        meal_path = data_dir / "meal_log.csv"
-        if meal_path.exists():
-            today = datetime.now().strftime("%Y-%m-%d")
-            rows = read_csv(meal_path)
-            health["meals_today"] = [r for r in rows if r.get("date") == today]
+    # Today's meals (SQLite)
+    today = datetime.now().strftime("%Y-%m-%d")
+    meal_rows = db.execute(
+        "SELECT date, meal_num, time_of_day, description, protein_g, carbs_g, fat_g, calories, notes "
+        "FROM meal_entry WHERE person_id = ? AND date = ? ORDER BY meal_num", (pid, today)
+    ).fetchall()
+    if meal_rows:
+        health["meals_today"] = [dict(r) for r in meal_rows]
+    elif he_uid:
+        csv_rows = read_csv(_data_dir(he_uid) / "meal_log.csv")
+        if csv_rows:
+            health["meals_today"] = [r for r in csv_rows if r.get("date") == today]
 
+    if health:
         context["health"] = health
 
     # Load coach notes from context.md if present
