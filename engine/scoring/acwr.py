@@ -207,9 +207,10 @@ def build_session_list(
                 except (ValueError, TypeError):
                     pass
             else:
+                dur = s.get("duration_min", 60)
                 sessions.append({
                     "date": date,
-                    "duration_min": float(s.get("duration_min", 60)),
+                    "duration_min": float(dur) if dur and str(dur).strip() else 60.0,
                     "rpe": float(rpe),
                     "type": s.get("type", "training"),
                     "name": s.get("name", "Session"),
