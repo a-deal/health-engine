@@ -870,7 +870,7 @@ def _get_meals(
 
         result[d] = day_result
 
-    result["_source"] = {"meals": _meal_source, "burns": _burn_source}
+    result["data_source"] = {"meals": _meal_source, "burns": _burn_source}
     return result
 
 
