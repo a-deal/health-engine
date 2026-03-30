@@ -654,6 +654,66 @@ def build_briefing(config: dict) -> dict:
     if alerts:
         briefing["alerts"] = filter_alerts(alerts, outcome, tenure_tier)
 
+    # --- Measurement prompts (equipment the user has) ---
+    measurement_prompts = []
+    today_dt = datetime.strptime(today, '%Y-%m-%d')
+
+    # Blood pressure: 7-day series monthly (AHA standard)
+    bp_rows_raw = read_csv(data_dir / 'bp_log.csv')
+    if bp_rows_raw:
+        last_bp_date = bp_rows_raw[-1].get('date', '')
+        if last_bp_date:
+            try:
+                days_since_bp = (today_dt - datetime.strptime(last_bp_date, '%Y-%m-%d')).days
+                if days_since_bp >= 28:
+                    measurement_prompts.append({
+                        'metric': 'blood_pressure',
+                        'action': 'Start your monthly 7-day BP series. Take a morning reading before coffee, seated 5 min. Log daily for 7 days.',
+                        'last_measured': last_bp_date,
+                        'days_since': days_since_bp,
+                        'schedule': 'monthly (7-day series)',
+                    })
+            except ValueError:
+                pass
+    else:
+        measurement_prompts.append({
+            'metric': 'blood_pressure',
+            'action': 'No BP readings on file. Start a 7-day morning series: seated 5 min, before coffee.',
+            'last_measured': None,
+            'days_since': None,
+            'schedule': 'monthly (7-day series)',
+        })
+
+    # Waist circumference: monthly during active cut
+    config_profile = config.get('profile', {})
+    waist = config_profile.get('waist_inches')
+    waist_date = config_profile.get('waist_date')
+    if waist and waist_date:
+        try:
+            days_since_waist = (today_dt - datetime.strptime(waist_date, '%Y-%m-%d')).days
+            if days_since_waist >= 28:
+                measurement_prompts.append({
+                    'metric': 'waist_circumference',
+                    'action': 'Monthly waist measurement due. Measure at navel, standing, exhale normally.',
+                    'last_measured': waist_date,
+                    'last_value': waist,
+                    'days_since': days_since_waist,
+                    'schedule': 'monthly',
+                })
+        except ValueError:
+            pass
+    elif not waist:
+        measurement_prompts.append({
+            'metric': 'waist_circumference',
+            'action': 'No waist measurement on file. Measure at navel, standing, exhale normally. Takes 30 seconds.',
+            'last_measured': None,
+            'days_since': None,
+            'schedule': 'monthly',
+        })
+
+    if measurement_prompts:
+        briefing['measurement_prompts'] = measurement_prompts
+
     return briefing
 
 
