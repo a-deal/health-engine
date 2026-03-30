@@ -311,6 +311,16 @@ def _normalize_lab_key(name: str) -> str:
 def _checkin(greeting: str = "morning check-in", user_id: str | None = None) -> dict:
     from engine.coaching.briefing import build_briefing
 
+    # Pull fresh Garmin data before building the briefing
+    try:
+        from engine.integrations.garmin import GarminClient
+        config_pre = _load_config(user_id)
+        garmin_cfg = config_pre.get("garmin", {})
+        if GarminClient.has_tokens(token_dir=garmin_cfg.get("token_dir")):
+            _pull_garmin(user_id=user_id)
+    except Exception:
+        pass  # Garmin pull is best-effort, don't block check-in
+
     config = _load_config(user_id)
     if user_id and user_id != "default":
         config["data_dir"] = str(_data_dir(user_id))
