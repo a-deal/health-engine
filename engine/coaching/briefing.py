@@ -654,6 +654,88 @@ def build_briefing(config: dict) -> dict:
     if alerts:
         briefing["alerts"] = filter_alerts(alerts, outcome, tenure_tier)
 
+    # --- Today's check-in status ---
+    # Shows what's been logged today vs what's still missing, so the coach
+    # can prompt for it instead of assuming.
+    today_status = {}
+
+    # Sleep: did we log last night's sleep?
+    sleep_path = data_dir / "sleep_log.csv"
+    sleep_rows = read_csv(sleep_path) if sleep_path.exists() else []
+    if sleep_rows:
+        last_sleep = sleep_rows[-1]
+        last_sleep_date = last_sleep.get("date", "")
+        today_status["sleep"] = {
+            "logged_today": last_sleep_date == today,
+            "last_date": last_sleep_date,
+            "last_bed_time": last_sleep.get("bed_time"),
+            "last_wake_time": last_sleep.get("wake_time"),
+        }
+        if last_sleep_date != today:
+            today_status["sleep"]["note"] = f"No sleep entry for today. Last logged: {last_sleep_date}. Did you track last night's bed/wake time?"
+    else:
+        # Check Garmin for sleep data
+        garmin_sleep = briefing.get("today_snapshot", {}).get("sleep_hrs")
+        if garmin_sleep:
+            today_status["sleep"] = {
+                "logged_today": True,
+                "source": "garmin",
+                "hours": garmin_sleep,
+            }
+        else:
+            today_status["sleep"] = {
+                "logged_today": False,
+                "note": "No sleep data for today. What time did you go to bed and wake up?",
+            }
+
+    # Habits: what's logged today vs what's expected
+    if habit_data:
+        today_habits_raw = [h for h in habit_data if h.get("date") == today]
+        if today_habits_raw:
+            sample = today_habits_raw[-1]
+            skip_cols = {"date", "notes"}
+            logged = {}
+            missing = []
+            for k, v in sample.items():
+                if k.lower() in skip_cols:
+                    continue
+                val = (v or "").lower()
+                if val in ("yes", "true", "1", "y"):
+                    logged[k] = True
+                elif val in ("no", "false", "0", "n"):
+                    logged[k] = False
+                else:
+                    missing.append(k)
+            today_status["habits"] = {
+                "logged_today": True,
+                "date": today,
+                "completed": {k: v for k, v in logged.items() if v},
+                "missed": {k: v for k, v in logged.items() if not v},
+                "not_yet_logged": missing,
+                "hit_count": sum(1 for v in logged.values() if v),
+                "total_count": len(logged),
+            }
+        else:
+            last_habit_date = habit_data[-1].get("date", "") if habit_data else ""
+            today_status["habits"] = {
+                "logged_today": False,
+                "last_date": last_habit_date,
+                "note": f"No habits logged for today. Last entry: {last_habit_date}. Did you knock out your sleep stack last night? What about this morning's routine?",
+            }
+
+    # Weight: already handled above, reference it
+    if "weight" in briefing:
+        w = briefing["weight"]
+        today_status["weight"] = {
+            "logged_today": w.get("weighed_in_today", False),
+            "last_value": w.get("current"),
+            "last_date": w.get("last_date"),
+        }
+        if not w.get("weighed_in_today"):
+            today_status["weight"]["note"] = f"No weigh-in today. Last: {w.get('current')} lbs on {w.get('last_date')}. Step on the scale?"
+
+    briefing["today_status"] = today_status
+
     # --- Measurement prompts based on equipment + schedules ---
     measurement_prompts = []
     today_dt = datetime.strptime(today, '%Y-%m-%d')
