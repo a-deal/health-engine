@@ -101,49 +101,43 @@ ssh "$REMOTE" "$REMOTE_PATH; cd ~/src/health-engine && bash scripts/sign_shortcu
 
 # ── Post-deploy verification ──
 echo ""
-echo "Verifying agent routing..."
-ROUTING_OK=true
+echo "Verifying agent bindings..."
 
-# Check bindings are correct
+# Bindings are what actually route messages. Session key prefixes are unreliable
+# after gateway restarts (sessions get recreated under default agent).
 BINDINGS=$(ssh "$REMOTE" "$REMOTE_PATH; openclaw agents bindings 2>&1")
 echo "$BINDINGS"
 echo ""
 
-# Check all active sessions route to the expected agent
-echo "Checking active sessions..."
-ssh "$REMOTE" "$REMOTE_PATH; openclaw sessions --json 2>/dev/null" | python3 -c "
-import json, sys
+# Verify expected bindings exist
+echo "$BINDINGS" | python3 -c "
+import sys
+lines = sys.stdin.read()
 
 expected = {
-    'telegram:direct:6460316634': 'main',   # Grigoriy -> Milo
-    'telegram:direct:80135247': 'k',         # Andrew -> K
+    'k <- telegram peer=dm:80135247': 'Andrew Telegram -> K',
+    'main <- telegram': 'Default Telegram -> Milo',
 }
 
-d = json.load(sys.stdin)
-issues = []
-for s in d.get('sessions', []):
-    key = s.get('key', '')
-    agent = key.split(':')[1] if ':' in key else '?'
+missing = []
+for pattern, label in expected.items():
+    if pattern not in lines:
+        missing.append(f'  MISSING: {label} ({pattern})')
 
-    # Check telegram sessions specifically (where misrouting happened)
-    for pattern, expected_agent in expected.items():
-        if pattern in key and agent != expected_agent:
-            issues.append(f'  MISROUTE: {key} -> agent:{agent} (expected {expected_agent})')
-
-if issues:
-    print('ROUTING ISSUES DETECTED:')
-    for i in issues:
-        print(i)
+if missing:
+    print('BINDING ISSUES:')
+    for m in missing:
+        print(m)
     print('')
-    print('Fix: openclaw gateway call sessions.reset --params \\'{ \"key\": \"<session_key>\" }\\'')
+    print('Check: openclaw agents bindings')
     sys.exit(1)
 else:
-    print('  All sessions routed correctly.')
+    print('  All bindings verified.')
 " 2>&1 && ROUTING_OK=true || ROUTING_OK=false
 
 if [ "$ROUTING_OK" = "false" ]; then
     echo ""
-    echo "WARNING: Routing issues detected. Deploy succeeded but fix misroutes before users interact."
+    echo "WARNING: Binding issues detected. Deploy succeeded but fix before users interact."
 else
     echo ""
     echo "Verification complete."
