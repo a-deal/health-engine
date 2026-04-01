@@ -17,6 +17,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import time
@@ -27,6 +28,8 @@ from urllib.parse import urlencode
 
 from .config import GatewayConfig, load_gateway_config
 from .token_store import TokenStore
+
+logger = logging.getLogger("health-engine.gateway")
 
 
 # --- Rate limiting (in-memory) ---
@@ -281,21 +284,23 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
 
         checks["user_data"] = user_freshness
 
-        # 3. Garmin tokens
-        garmin_tokens_dir = Path.home() / ".config" / "health-engine" / "garmin-tokens"
-        if garmin_tokens_dir.exists():
-            token_file = garmin_tokens_dir / "oauth2_token.json"
-            if token_file.exists():
-                import time
-                age_hours = (time.time() - token_file.stat().st_mtime) / 3600
-                checks["garmin_tokens"] = {
-                    "status": "ok" if age_hours < 168 else "stale",
-                    "age_hours": round(age_hours, 1),
-                }
-            else:
-                checks["garmin_tokens"] = {"status": "missing"}
-        else:
-            checks["garmin_tokens"] = {"status": "not_configured"}
+        # 3. Garmin tokens (per-user)
+        garmin_tokens_base = Path.home() / ".config" / "health-engine" / "tokens" / "garmin"
+        garmin_status = {}
+        if garmin_tokens_base.exists():
+            for user_dir in sorted(garmin_tokens_base.iterdir()):
+                if not user_dir.is_dir() or user_dir.is_symlink():
+                    continue
+                token_file = user_dir / "oauth2_token.json"
+                if token_file.exists():
+                    age_hours = (time.time() - token_file.stat().st_mtime) / 3600
+                    garmin_status[user_dir.name] = {
+                        "status": "ok" if age_hours < 168 else "stale",
+                        "age_hours": round(age_hours, 1),
+                    }
+                else:
+                    garmin_status[user_dir.name] = {"status": "no_oauth2_token"}
+        checks["garmin_tokens"] = garmin_status if garmin_status else {"status": "no_users_connected"}
 
         # 4. Apple Health per-user freshness
         apple_health = {}
@@ -367,9 +372,13 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
 
         return _garmin_auth_page(user_id, state)
 
-    # Server-side rate limit: one Garmin auth attempt per user per 60 seconds
-    _garmin_auth_attempts: dict[str, float] = {}
-    _GARMIN_AUTH_COOLDOWN = 60  # seconds
+    # Exponential backoff for Garmin auth: tracks per-user attempt history.
+    # After a 429 from Garmin, backoff doubles each time: 2m, 4m, 8m, 16m, ... up to 2h.
+    # Successful auth resets the backoff. Non-429 failures use a fixed 60s cooldown.
+    _garmin_auth_state: dict[str, dict] = {}
+    _GARMIN_BASE_COOLDOWN = 120  # 2 minutes after first 429
+    _GARMIN_MAX_COOLDOWN = 7200  # 2 hours max
+    _GARMIN_NORMAL_COOLDOWN = 60  # non-429 failures
 
     @app.post("/auth/garmin/submit")
     async def garmin_auth_submit(
@@ -383,19 +392,49 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
         if verified is None:
             return JSONResponse({"authenticated": False, "error": "Invalid or expired link."}, status_code=403)
 
-        # Server-side throttle
         now = time.time()
-        last_attempt = _garmin_auth_attempts.get(user_id, 0)
-        if now - last_attempt < _GARMIN_AUTH_COOLDOWN:
-            wait = int(_GARMIN_AUTH_COOLDOWN - (now - last_attempt))
+        auth_state = _garmin_auth_state.get(user_id, {})
+        last_attempt = auth_state.get("last_attempt", 0)
+        cooldown = auth_state.get("cooldown", 0)
+
+        if cooldown and now - last_attempt < cooldown:
+            wait = int(cooldown - (now - last_attempt))
+            mins = wait // 60
+            secs = wait % 60
+            time_str = f"{mins}m {secs}s" if mins else f"{secs}s"
             return JSONResponse({
                 "authenticated": False,
-                "error": f"Please wait {wait} seconds before trying again.",
+                "error": f"Garmin rate limit active. Please wait {time_str} before trying again.",
                 "rate_limited": True,
+                "retry_after_secs": wait,
             })
-        _garmin_auth_attempts[user_id] = now
 
+        _garmin_auth_state[user_id] = {**auth_state, "last_attempt": now}
         result = _do_garmin_auth(email, password, token_store, verified[0])
+
+        if result.get("authenticated"):
+            _garmin_auth_state.pop(user_id, None)
+        elif result.get("rate_limited"):
+            consecutive_429s = auth_state.get("consecutive_429s", 0) + 1
+            new_cooldown = min(
+                _GARMIN_BASE_COOLDOWN * (2 ** (consecutive_429s - 1)),
+                _GARMIN_MAX_COOLDOWN,
+            )
+            _garmin_auth_state[user_id] = {
+                "last_attempt": now,
+                "cooldown": new_cooldown,
+                "consecutive_429s": consecutive_429s,
+                "first_429_at": auth_state.get("first_429_at", now),
+            }
+            result["retry_after_secs"] = int(new_cooldown)
+            result["consecutive_429s"] = consecutive_429s
+        else:
+            _garmin_auth_state[user_id] = {
+                **auth_state,
+                "last_attempt": now,
+                "cooldown": _GARMIN_NORMAL_COOLDOWN,
+            }
+
         return JSONResponse(result)
 
     # --- Google Calendar OAuth (Authorization Code + PKCE) ---
@@ -544,7 +583,16 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
 
 
 def _do_garmin_auth(email: str, password: str, token_store: TokenStore, user_id: str) -> dict:
-    """Authenticate with Garmin via garth and cache tokens."""
+    """Authenticate with Garmin via garth and cache tokens.
+
+    Error classification:
+    - 429: Garmin SSO rate limit. Exponential backoff required.
+    - 401: Wrong credentials.
+    - 403: Account locked, region block, or CAPTCHA.
+    - MFA: Multi-factor auth required (not supported in web flow).
+    - Network: DNS, timeout, connection refused.
+    - Unknown: Unclassified. Raw error preserved for diagnosis.
+    """
     try:
         from garminconnect import Garmin
 
@@ -554,24 +602,43 @@ def _do_garmin_auth(email: str, password: str, token_store: TokenStore, user_id:
         td = token_store.garmin_token_dir(user_id)
         client.garth.dump(str(td))
 
+        logger.info("garmin_auth success user_id=%s", user_id)
         return {
             "authenticated": True,
             "user_id": user_id,
             "token_dir": str(td),
         }
     except Exception as e:
-        error_msg = str(e)
+        raw_error = str(e)
+        error_type = "unknown"
         is_rate_limited = False
-        if "429" in error_msg or "Too Many Requests" in error_msg:
-            error_msg = "Garmin is temporarily blocking login attempts. Please wait 15 minutes and try again. Do not retry until then."
+        user_msg = raw_error
+
+        if "429" in raw_error or "Too Many Requests" in raw_error:
+            error_type = "rate_limit_429"
             is_rate_limited = True
-        elif "401" in error_msg:
-            error_msg = "Invalid email or password."
-        elif "MFA" in error_msg.upper() or "verification" in error_msg.lower():
-            error_msg = "MFA required. Currently only non-MFA accounts are supported via web auth."
+            user_msg = "Garmin is rate-limiting login attempts from this server. The retry timer above will tell you when to try again. Do not close this page."
+        elif "401" in raw_error:
+            error_type = "bad_credentials_401"
+            user_msg = "Invalid email or password. Double-check your Garmin Connect credentials."
+        elif "403" in raw_error:
+            error_type = "forbidden_403"
+            user_msg = "Garmin blocked this login. Possible causes: account locked, region restriction, or CAPTCHA required. Try logging into connect.garmin.com in your browser first, then retry here."
+        elif "MFA" in raw_error.upper() or "verification" in raw_error.lower():
+            error_type = "mfa_required"
+            user_msg = "Your Garmin account requires multi-factor authentication. Please disable MFA temporarily, connect here, then re-enable it."
+        elif any(w in raw_error.lower() for w in ["timeout", "timed out", "connection", "dns", "resolve"]):
+            error_type = "network_error"
+            user_msg = "Could not reach Garmin servers. This is a network issue, not a credentials issue. Try again in a few minutes."
+
+        logger.warning(
+            "garmin_auth failed user_id=%s error_type=%s raw=%s",
+            user_id, error_type, raw_error[:200],
+        )
         return {
             "authenticated": False,
-            "error": error_msg,
+            "error": user_msg,
+            "error_type": error_type,
             "rate_limited": is_rate_limited,
         }
 
@@ -700,10 +767,14 @@ def _garmin_auth_page(user_id: str, state: str) -> str:
         status.className = 'status error';
         status.textContent = data.error;
         btn.disabled = true;
-        let secs = 900;
+        let secs = data.retry_after_secs || 120;
         const timer = setInterval(() => {{
           secs--;
-          btn.textContent = 'Wait ' + Math.ceil(secs/60) + ' min';
+          if (secs > 60) {{
+            btn.textContent = 'Wait ' + Math.ceil(secs/60) + ' min';
+          }} else {{
+            btn.textContent = 'Wait ' + secs + 's';
+          }}
           if (secs <= 0) {{
             clearInterval(timer);
             btn.disabled = false;
