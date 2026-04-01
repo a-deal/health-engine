@@ -25,3 +25,16 @@ users:
     user_id: "grigoriy"
     name: Grigoriy
     email: tugg030@gmail.com
+
+  "+16509636822":
+    user_id: "dean"
+    name: Dean
+    email: dean1wu@gmail.com
+
+  "+15105018493":
+    user_id: "yusuf"
+    name: Yusuf
+
+  "+19255426289":
+    user_id: "manny"
+    name: Manny

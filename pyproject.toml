@@ -3,13 +3,13 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "kiso"
-version = "0.7.0"
-description = "Health intelligence platform — backend for Kasane (iOS) and Milo (coaching agent). Shared data layer, 20-metric scoring engine, wearable integrations, MCP tools."
+name = "baseline-health"
+version = "0.8.1"
+description = "AI health coach for Claude. Tracks 20 metrics, scores your health coverage, coaches you through 14-day focused programs. Local-first, your data stays on your machine."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
-keywords = ["health", "mcp", "claude", "scoring", "wearables", "kasane", "coaching"]
+keywords = ["health", "mcp", "claude", "scoring", "wearables", "coaching", "baseline"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3.11",
@@ -29,18 +29,20 @@ gateway = ["fastapi>=0.115", "uvicorn>=0.32", "cryptography>=42.0"]
 dev = ["pytest>=7.0"]
 
 [project.scripts]
+baseline-health = "mcp_server.server:main"
 kiso = "mcp_server.server:main"
-health-engine = "mcp_server.server:main"  # backward compat
+health-engine = "mcp_server.server:main"
 
 [project.urls]
-Homepage = "https://kasanelife.com"
+Homepage = "https://mybaseline.health"
 Repository = "https://github.com/a-deal/kiso"
 
 [tool.setuptools.packages.find]
 include = ["engine*", "mcp_server*"]
 
 [tool.setuptools.package-data]
-engine = ["data/*.json", "data/*.md", "insights/rules.yaml"]
+engine = ["data/*.json", "data/*.md", "insights/rules.yaml", "coaching/*.yaml", "coaching/*.md"]
+mcp_server = ["data/coaching/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

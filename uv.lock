@@ -47,6 +47,50 @@ wheels = [
 ]
 
 [[package]]
+name = "baseline-health"
+version = "0.8.0"
+source = { editable = "." }
+dependencies = [
+    { name = "mcp", extra = ["cli"] },
+    { name = "numpy" },
+    { name = "pyyaml" },
+]
+
+[package.optional-dependencies]
+calendar = [
+    { name = "google-api-python-client" },
+    { name = "google-auth-httplib2" },
+    { name = "google-auth-oauthlib" },
+]
+dev = [
+    { name = "pytest" },
+]
+garmin = [
+    { name = "garminconnect" },
+]
+gateway = [
+    { name = "cryptography" },
+    { name = "fastapi" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cryptography", marker = "extra == 'gateway'", specifier = ">=42.0" },
+    { name = "fastapi", marker = "extra == 'gateway'", specifier = ">=0.115" },
+    { name = "garminconnect", marker = "extra == 'garmin'", specifier = ">=0.2.0" },
+    { name = "google-api-python-client", marker = "extra == 'calendar'", specifier = ">=2.100" },
+    { name = "google-auth-httplib2", marker = "extra == 'calendar'", specifier = ">=0.2" },
+    { name = "google-auth-oauthlib", marker = "extra == 'calendar'", specifier = ">=1.2" },
+    { name = "mcp", extras = ["cli"], specifier = ">=1.6.0" },
+    { name = "numpy", specifier = ">=1.24" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "uvicorn", marker = "extra == 'gateway'", specifier = ">=0.32" },
+]
+provides-extras = ["garmin", "calendar", "gateway", "dev"]
+
+[[package]]
 name = "certifi"
 version = "2026.2.25"
 source = { registry = "https://pypi.org/simple" }
@@ -411,50 +455,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/01/ee/02a2c011bdab74c6f
 wheels = [
     { url = "https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl", hash = "sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86", size = 37515, upload-time = "2025-04-24T03:35:24.344Z" },
 ]
-
-[[package]]
-name = "health-engine"
-version = "0.6.0"
-source = { editable = "." }
-dependencies = [
-    { name = "mcp", extra = ["cli"] },
-    { name = "numpy" },
-    { name = "pyyaml" },
-]
-
-[package.optional-dependencies]
-calendar = [
-    { name = "google-api-python-client" },
-    { name = "google-auth-httplib2" },
-    { name = "google-auth-oauthlib" },
-]
-dev = [
-    { name = "pytest" },
-]
-garmin = [
-    { name = "garminconnect" },
-]
-gateway = [
-    { name = "cryptography" },
-    { name = "fastapi" },
-    { name = "uvicorn" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "cryptography", marker = "extra == 'gateway'", specifier = ">=42.0" },
-    { name = "fastapi", marker = "extra == 'gateway'", specifier = ">=0.115" },
-    { name = "garminconnect", marker = "extra == 'garmin'", specifier = ">=0.2.0" },
-    { name = "google-api-python-client", marker = "extra == 'calendar'", specifier = ">=2.100" },
-    { name = "google-auth-httplib2", marker = "extra == 'calendar'", specifier = ">=0.2" },
-    { name = "google-auth-oauthlib", marker = "extra == 'calendar'", specifier = ">=1.2" },
-    { name = "mcp", extras = ["cli"], specifier = ">=1.6.0" },
-    { name = "numpy", specifier = ">=1.24" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "uvicorn", marker = "extra == 'gateway'", specifier = ">=0.32" },
-]
-provides-extras = ["garmin", "calendar", "gateway", "dev"]
 
 [[package]]
 name = "httpcore"

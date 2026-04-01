@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Deploy workspace files to Mac Mini and optionally reset sessions.
+# Deploy workspace files to Mac Mini, reset sessions, and verify routing.
 # Usage:
 #   ./deploy-coach.sh [workspace] --reset <phone>   # Copy files + reset one user
 #   ./deploy-coach.sh [workspace] --reset all        # Copy files + reset all users
@@ -11,6 +11,17 @@ WORKSPACE_DIR="${1:-$(dirname "$0")/workspace}"
 REMOTE="mac-mini"
 REMOTE_WORKSPACE="~/.openclaw/workspace/"
 REMOTE_PATH='export PATH="/opt/homebrew/bin:$HOME/Library/pnpm:$PATH"'
+
+# Expected routing: agent -> channel:peer
+# Add new users here as they're onboarded
+declare -A EXPECTED_ROUTING=(
+    ["agent:main:whatsapp:direct:+14152009584"]="main"    # Andrew WhatsApp -> Milo
+    ["agent:main:telegram:direct:6460316634"]="main"       # Grigoriy Telegram -> Milo
+    ["agent:k:telegram:direct:80135247"]="k"               # Andrew Telegram -> K
+    ["agent:main:whatsapp:direct:+17038878948"]="main"     # Paul WhatsApp -> Milo
+    ["agent:main:whatsapp:direct:+17033625977"]="main"     # Mike WhatsApp -> Milo
+    ["agent:main:whatsapp:direct:+12022552119"]="main"     # Dad WhatsApp -> Milo
+)
 
 # Resolve to absolute path
 WORKSPACE_DIR="$(cd "$WORKSPACE_DIR" && pwd)"
@@ -98,3 +109,54 @@ fi
 echo ""
 echo "Signing Apple Health shortcuts on Mac Mini..."
 ssh "$REMOTE" "$REMOTE_PATH; cd ~/src/health-engine && bash scripts/sign_shortcuts.sh" 2>&1 || echo "WARNING: Shortcut signing failed (non-fatal)"
+
+# ── Post-deploy verification ──
+echo ""
+echo "Verifying agent routing..."
+ROUTING_OK=true
+
+# Check bindings are correct
+BINDINGS=$(ssh "$REMOTE" "$REMOTE_PATH; openclaw agents bindings 2>&1")
+echo "$BINDINGS"
+echo ""
+
+# Check all active sessions route to the expected agent
+echo "Checking active sessions..."
+ssh "$REMOTE" "$REMOTE_PATH; openclaw sessions --json 2>/dev/null" | python3 -c "
+import json, sys
+
+expected = {
+    'telegram:direct:6460316634': 'main',   # Grigoriy -> Milo
+    'telegram:direct:80135247': 'k',         # Andrew -> K
+}
+
+d = json.load(sys.stdin)
+issues = []
+for s in d.get('sessions', []):
+    key = s.get('key', '')
+    agent = key.split(':')[1] if ':' in key else '?'
+
+    # Check telegram sessions specifically (where misrouting happened)
+    for pattern, expected_agent in expected.items():
+        if pattern in key and agent != expected_agent:
+            issues.append(f'  MISROUTE: {key} -> agent:{agent} (expected {expected_agent})')
+
+if issues:
+    print('ROUTING ISSUES DETECTED:')
+    for i in issues:
+        print(i)
+    print('')
+    print('Fix: openclaw gateway call sessions.reset --params \\'{ \"key\": \"<session_key>\" }\\'')
+    sys.exit(1)
+else:
+    print('  All sessions routed correctly.')
+" 2>&1
+
+if [ $? -ne 0 ]; then
+    ROUTING_OK=false
+    echo ""
+    echo "WARNING: Routing issues detected. Fix before users interact."
+else
+    echo ""
+    echo "Verification complete. All clear."
+fi

@@ -153,8 +153,12 @@ async def api_handler(tool_name: str, request: Request, token: str = Query(None)
         except Exception:
             body = {}
 
-    # Accept token from query string or JSON body
-    effective_token = token or body.get("token")
+    # Accept token from query string, JSON body, or Authorization header
+    bearer_token = None
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        bearer_token = auth_header[7:].strip()
+    effective_token = token or body.get("token") or bearer_token
 
     if not config.api_token:
         raise HTTPException(500, "API token not configured on server")

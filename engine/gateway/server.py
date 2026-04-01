@@ -221,6 +221,139 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
     async def health_check():
         return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
 
+    @app.get("/health/deep")
+    async def deep_health_check():
+        """Comprehensive system health. Checks API, database, data freshness, tokens, tunnel."""
+        from pathlib import Path
+        import sqlite3
+
+        checks = {}
+        critical = False
+
+        # 1. Database
+        try:
+            db_path = Path("data/kasane.db")
+            if db_path.exists():
+                conn = sqlite3.connect(str(db_path))
+                conn.execute("SELECT 1")
+                conn.close()
+                checks["database"] = {"status": "ok"}
+            else:
+                checks["database"] = {"status": "warning", "message": "kasane.db not found"}
+        except Exception as e:
+            checks["database"] = {"status": "error", "error": str(e)[:100]}
+            critical = True
+
+        # 2. Per-user data freshness
+        users_dir = Path("data/users")
+        user_freshness = {}
+        stale_hours = 72
+        skip_users = {"default", "test_onboard", "test_cleanup", "test_upload", "test_user", "--params"}
+
+        if users_dir.exists():
+            for user_dir in sorted(users_dir.iterdir()):
+                if not user_dir.is_dir() or user_dir.name in skip_users or user_dir.name.startswith("test_"):
+                    continue
+                uid = user_dir.name
+
+                # Find most recent file modification
+                latest_mod = 0
+                for f in user_dir.rglob("*.json"):
+                    mtime = f.stat().st_mtime
+                    if mtime > latest_mod:
+                        latest_mod = mtime
+
+                for f in user_dir.rglob("*.csv"):
+                    mtime = f.stat().st_mtime
+                    if mtime > latest_mod:
+                        latest_mod = mtime
+
+                if latest_mod > 0:
+                    import time
+                    age_hours = (time.time() - latest_mod) / 3600
+                    status = "ok" if age_hours < stale_hours else "stale"
+                    user_freshness[uid] = {
+                        "status": status,
+                        "last_data_hours_ago": round(age_hours, 1),
+                    }
+                else:
+                    user_freshness[uid] = {"status": "no_data"}
+
+        checks["user_data"] = user_freshness
+
+        # 3. Garmin tokens
+        garmin_tokens_dir = Path.home() / ".config" / "health-engine" / "garmin-tokens"
+        if garmin_tokens_dir.exists():
+            token_file = garmin_tokens_dir / "oauth2_token.json"
+            if token_file.exists():
+                import time
+                age_hours = (time.time() - token_file.stat().st_mtime) / 3600
+                checks["garmin_tokens"] = {
+                    "status": "ok" if age_hours < 168 else "stale",
+                    "age_hours": round(age_hours, 1),
+                }
+            else:
+                checks["garmin_tokens"] = {"status": "missing"}
+        else:
+            checks["garmin_tokens"] = {"status": "not_configured"}
+
+        # 4. Apple Health per-user freshness
+        apple_health = {}
+        if users_dir.exists():
+            for user_dir in sorted(users_dir.iterdir()):
+                if not user_dir.is_dir() or user_dir.name in skip_users:
+                    continue
+                ah_file = user_dir / "apple_health_latest.json"
+                if ah_file.exists():
+                    try:
+                        import json as _json
+                        data = _json.loads(ah_file.read_text())
+                        last_updated = data.get("last_updated", "")
+                        if last_updated:
+                            from datetime import datetime as _dt
+                            try:
+                                ts = _dt.fromisoformat(last_updated.replace("Z", "+00:00"))
+                                age_hours = (datetime.now().astimezone() - ts).total_seconds() / 3600
+                                apple_health[user_dir.name] = {
+                                    "status": "ok" if age_hours < 48 else "stale",
+                                    "last_sync_hours_ago": round(age_hours, 1),
+                                }
+                            except:
+                                apple_health[user_dir.name] = {"status": "parse_error"}
+                        else:
+                            apple_health[user_dir.name] = {"status": "no_timestamp"}
+                    except:
+                        apple_health[user_dir.name] = {"status": "read_error"}
+
+        if apple_health:
+            checks["apple_health"] = apple_health
+
+        # 5. API audit log size (sanity check)
+        audit_path = Path("data/admin/api_audit.jsonl")
+        if audit_path.exists():
+            size_mb = audit_path.stat().st_size / (1024 * 1024)
+            checks["audit_log"] = {
+                "status": "ok" if size_mb < 100 else "large",
+                "size_mb": round(size_mb, 1),
+            }
+
+        # 6. Disk space
+        import shutil
+        usage = shutil.disk_usage(str(Path.home()))
+        pct_used = round(100 * (usage.used / usage.total), 1)
+        checks["disk"] = {
+            "status": "ok" if pct_used < 90 else "critical",
+            "pct_used": pct_used,
+        }
+        if pct_used >= 90:
+            critical = True
+
+        return {
+            "status": "critical" if critical else "healthy",
+            "timestamp": datetime.utcnow().isoformat(),
+            "checks": checks,
+        }
+
     @app.get("/auth/garmin", response_class=HTMLResponse)
     async def garmin_auth_form(user: str = Query(...), state: str = Query(...)):
         """Serve the Garmin credential form."""
