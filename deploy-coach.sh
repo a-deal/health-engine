@@ -12,17 +12,6 @@ REMOTE="mac-mini"
 REMOTE_WORKSPACE="~/.openclaw/workspace/"
 REMOTE_PATH='export PATH="/opt/homebrew/bin:$HOME/Library/pnpm:$PATH"'
 
-# Expected routing: agent -> channel:peer
-# Add new users here as they're onboarded
-declare -A EXPECTED_ROUTING=(
-    ["agent:main:whatsapp:direct:+14152009584"]="main"    # Andrew WhatsApp -> Milo
-    ["agent:main:telegram:direct:6460316634"]="main"       # Grigoriy Telegram -> Milo
-    ["agent:k:telegram:direct:80135247"]="k"               # Andrew Telegram -> K
-    ["agent:main:whatsapp:direct:+17038878948"]="main"     # Paul WhatsApp -> Milo
-    ["agent:main:whatsapp:direct:+17033625977"]="main"     # Mike WhatsApp -> Milo
-    ["agent:main:whatsapp:direct:+12022552119"]="main"     # Dad WhatsApp -> Milo
-)
-
 # Resolve to absolute path
 WORKSPACE_DIR="$(cd "$WORKSPACE_DIR" && pwd)"
 

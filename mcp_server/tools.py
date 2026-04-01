@@ -3250,6 +3250,9 @@ TOOL_REGISTRY = {
     "send_message": _send_message,
     "ingest_message": _ingest_message,
     "get_conversations": _get_conversations,
+    "log_workout": _log_workout,
+    "get_workout_program": _get_workout_program,
+    "get_workout_history": _get_workout_history,
     # Excluded from HTTP: auth_garmin (interactive), auth_oura (interactive),
     # auth_whoop (interactive), open_dashboard (browser)
 }
