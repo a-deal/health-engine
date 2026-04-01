@@ -35,6 +35,12 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Static files (dashboard)
+    from fastapi.staticfiles import StaticFiles
+    dashboard_dir = Path(__file__).parent.parent / "dashboard"
+    if dashboard_dir.exists():
+        app.mount("/dashboard", StaticFiles(directory=str(dashboard_dir), html=True), name="dashboard")
+
     # Health check
     @app.get("/")
     async def health():

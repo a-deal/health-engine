@@ -59,6 +59,12 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
     app = FastAPI(title="Health Engine Gateway", docs_url=None, redoc_url=None)
     token_store = TokenStore()
 
+    # --- Static files (dashboard) ---
+    from fastapi.staticfiles import StaticFiles
+    dashboard_dir = Path(__file__).parent.parent.parent / "dashboard"
+    if dashboard_dir.exists():
+        app.mount("/dashboard", StaticFiles(directory=str(dashboard_dir), html=True), name="dashboard")
+
     # --- Health-engine tool API + transcript viewer ---
     from .api import api_handler, api_list_tools, api_async_handler, api_job_status, api_upload, api_shortcut, open_shortcut_redirect, open_automation_redirect
     from .transcripts import transcripts_api, transcripts_html
