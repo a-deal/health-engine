@@ -56,8 +56,22 @@ def load_env():
     return env
 
 
+def _load_users_from_sqlite():
+    """Load users from SQLite (canonical source)."""
+    try:
+        sys.path.insert(0, str(PROJECT_ROOT))
+        from engine.gateway.db import get_active_users, init_db
+        init_db()
+        return get_active_users()
+    except Exception:
+        return []
+
+
 def load_users_yaml():
-    """Load users.yaml → {phone: {user_id, name, ...}}."""
+    """Load users → {phone: {user_id, name, ...}}. SQLite-first, yaml fallback."""
+    users = _load_users_from_sqlite()
+    if users:
+        return {u["phone"]: u for u in users if u["phone"]}
     if not USERS_YAML.exists():
         return {}
     with open(USERS_YAML) as f:
@@ -67,21 +81,30 @@ def load_users_yaml():
 
 def phone_to_userid():
     """Return {phone: user_id} mapping."""
-    users = load_users_yaml()
-    return {phone: info.get("user_id", "") for phone, info in users.items()}
+    users = _load_users_from_sqlite()
+    if users:
+        return {u["phone"]: u["user_id"] for u in users if u["phone"]}
+    raw = load_users_yaml()
+    return {phone: info.get("user_id", "") for phone, info in raw.items()}
 
 
 def userid_to_phone():
     """Return {user_id: phone} mapping."""
-    users = load_users_yaml()
-    return {info.get("user_id", ""): phone for phone, info in users.items()}
+    users = _load_users_from_sqlite()
+    if users:
+        return {u["user_id"]: u["phone"] for u in users if u["phone"]}
+    raw = load_users_yaml()
+    return {info.get("user_id", ""): phone for phone, info in raw.items()}
 
 
 def userid_to_name():
     """Return {user_id: name} mapping."""
-    users = load_users_yaml()
+    users = _load_users_from_sqlite()
+    if users:
+        return {u["user_id"]: u["name"] for u in users}
+    raw = load_users_yaml()
     mapping = {}
-    for phone, info in users.items():
+    for phone, info in raw.items():
         uid = info.get("user_id", "")
         name = info.get("name", uid.title())
         mapping[uid] = name

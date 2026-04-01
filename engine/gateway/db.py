@@ -65,6 +65,10 @@ CREATE TABLE IF NOT EXISTS person (
     family_history_json TEXT DEFAULT '[]',
     health_notes TEXT,
     health_engine_user_id TEXT,
+    phone TEXT,
+    email TEXT,
+    timezone TEXT DEFAULT 'America/Los_Angeles',
+    role TEXT DEFAULT 'user',
     channel TEXT,
     channel_target TEXT,
     wearables_json TEXT DEFAULT '[]',
@@ -357,18 +361,96 @@ def init_db(db_path: Path | str | None = None):
 def _migrate(conn: sqlite3.Connection):
     """Safe migrations for existing databases. Each is idempotent."""
     cols = {row[1] for row in conn.execute("PRAGMA table_info(person)").fetchall()}
+    migrations = {
+        "wearables_json": "ALTER TABLE person ADD COLUMN wearables_json TEXT DEFAULT '[]'",
+        "channel": "ALTER TABLE person ADD COLUMN channel TEXT",
+        "channel_target": "ALTER TABLE person ADD COLUMN channel_target TEXT",
+        "phone": "ALTER TABLE person ADD COLUMN phone TEXT",
+        "email": "ALTER TABLE person ADD COLUMN email TEXT",
+        "timezone": "ALTER TABLE person ADD COLUMN timezone TEXT DEFAULT 'America/Los_Angeles'",
+        "role": "ALTER TABLE person ADD COLUMN role TEXT DEFAULT 'user'",
+    }
     dirty = False
-    if "wearables_json" not in cols:
-        conn.execute("ALTER TABLE person ADD COLUMN wearables_json TEXT DEFAULT '[]'")
-        dirty = True
-    if "channel" not in cols:
-        conn.execute("ALTER TABLE person ADD COLUMN channel TEXT")
-        dirty = True
-    if "channel_target" not in cols:
-        conn.execute("ALTER TABLE person ADD COLUMN channel_target TEXT")
-        dirty = True
+    for col, sql in migrations.items():
+        if col not in cols:
+            conn.execute(sql)
+            dirty = True
     if dirty:
         conn.commit()
+
+
+# =====================================================================
+# User registry helpers (canonical source of truth for users)
+# =====================================================================
+
+
+def get_active_users(db_path: Path | str | None = None) -> list[dict]:
+    """Get all active users with messaging info.
+
+    Returns list of dicts with: user_id, name, phone, email, channel,
+    channel_target, timezone, role, person_id.
+    """
+    conn = get_db(db_path)
+    rows = conn.execute(
+        """SELECT id, name, health_engine_user_id, phone, email,
+                  channel, channel_target, timezone, role
+           FROM person
+           WHERE health_engine_user_id IS NOT NULL
+             AND deleted_at IS NULL
+           ORDER BY name"""
+    ).fetchall()
+    return [
+        {
+            "person_id": r["id"],
+            "user_id": r["health_engine_user_id"],
+            "name": r["name"],
+            "phone": r["phone"],
+            "email": r["email"],
+            "channel": r["channel"],
+            "channel_target": r["channel_target"],
+            "timezone": r["timezone"] or "America/Los_Angeles",
+            "role": r["role"] or "user",
+        }
+        for r in rows
+    ]
+
+
+def get_user(user_id: str, db_path: Path | str | None = None) -> dict | None:
+    """Get a single user by health_engine_user_id. Returns None if not found."""
+    conn = get_db(db_path)
+    r = conn.execute(
+        """SELECT id, name, health_engine_user_id, phone, email,
+                  channel, channel_target, timezone, role
+           FROM person
+           WHERE health_engine_user_id = ?
+             AND deleted_at IS NULL""",
+        (user_id,),
+    ).fetchone()
+    if r is None:
+        return None
+    return {
+        "person_id": r["id"],
+        "user_id": r["health_engine_user_id"],
+        "name": r["name"],
+        "phone": r["phone"],
+        "email": r["email"],
+        "channel": r["channel"],
+        "channel_target": r["channel_target"],
+        "timezone": r["timezone"] or "America/Los_Angeles",
+        "role": r["role"] or "user",
+    }
+
+
+def get_phone_to_user_map(db_path: Path | str | None = None) -> dict[str, dict]:
+    """Get phone -> user dict for inbound message routing."""
+    users = get_active_users(db_path)
+    result = {}
+    for u in users:
+        if u["phone"]:
+            result[u["phone"]] = u
+            clean = u["phone"].replace("+", "").replace(" ", "").replace("-", "")
+            result[clean] = u
+    return result
 
 
 # Entity name -> table name mapping (used by sync)
@@ -397,8 +479,8 @@ TABLE_COLUMNS = {
     "person": [
         "name", "relationship", "date_of_birth", "biological_sex",
         "conditions_json", "medications", "family_history_json",
-        "health_notes", "health_engine_user_id", "channel", "channel_target",
-        "wearables_json",
+        "health_notes", "health_engine_user_id", "phone", "email",
+        "timezone", "role", "channel", "channel_target", "wearables_json",
     ],
     "wearable_token": [
         "person_id", "user_id", "service", "token_name", "token_data",

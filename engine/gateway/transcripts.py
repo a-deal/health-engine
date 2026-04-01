@@ -26,31 +26,41 @@ _DEFAULT_USERS_YAML = os.path.expanduser("~/.openclaw/workspace/users.yaml")
 
 
 def _load_users_map() -> dict[str, str]:
-    """Load phone→name mapping from users.yaml.
+    """Load phone/user_id → name mapping from SQLite (canonical) with yaml fallback."""
+    mapping = {}
 
-    Handles the OpenClaw users.yaml format:
-      users:
-        "+14152009584":
-          user_id: default
-          name: Andrew
-    """
+    # Primary: SQLite
+    try:
+        from .db import get_active_users
+        for u in get_active_users():
+            name = u["name"]
+            if u["phone"]:
+                mapping[u["phone"]] = name
+                clean = u["phone"].replace("+", "").replace(" ", "").replace("-", "")
+                mapping[clean] = name
+            if u["user_id"]:
+                mapping[u["user_id"]] = name
+            if u["channel_target"]:
+                mapping[u["channel_target"]] = name
+        if mapping:
+            return mapping
+    except Exception:
+        pass
+
+    # Fallback: users.yaml (for when DB isn't initialized)
     path = Path(_DEFAULT_USERS_YAML)
     if not path.exists():
         return {}
     try:
         with open(path) as f:
             data = yaml.safe_load(f) or {}
-        # Handle nested users: key
         users = data.get("users", data)
-        mapping = {}
         for key, info in users.items():
             if isinstance(info, dict):
                 name = info.get("name", key)
-                # Key itself might be the phone number
                 clean = key.replace("+", "").replace(" ", "").replace("-", "")
                 mapping[clean] = name
                 mapping[key] = name
-                # Also map user_id to name
                 uid = info.get("user_id", "")
                 if uid:
                     mapping[uid] = name
