@@ -2005,8 +2005,8 @@ def _import_apple_health(file_path: str, lookback_days: int = 90, user_id: str |
 
 
 def _setup_profile(
-    age: int,
-    sex: str,
+    age: int | None = None,
+    sex: str | None = None,
     weight_target: float | None = None,
     protein_target: float | None = None,
     family_history: bool | None = None,
@@ -2045,8 +2045,10 @@ def _setup_profile(
             config = {}
 
     config.setdefault("profile", {})
-    config["profile"]["age"] = age
-    config["profile"]["sex"] = sex.upper()
+    if age is not None:
+        config["profile"]["age"] = age
+    if sex is not None:
+        config["profile"]["sex"] = sex.upper()
     if name is not None:
         config["profile"]["name"] = name
     if family_history is not None:
@@ -2093,12 +2095,23 @@ def _setup_profile(
     data_dir = _data_dir(user_id)
     data_dir.mkdir(parents=True, exist_ok=True)
 
+    # Rebuild briefing so dashboard reflects changes immediately
+    try:
+        from engine.coaching.briefing import build_briefing
+        briefing = build_briefing(config)
+        with open(data_dir / "briefing.json", "w") as f:
+            json.dump(briefing, f, indent=2, default=str)
+        briefing_refreshed = True
+    except Exception:
+        briefing_refreshed = False
+
     return {
         "saved": True,
         "config_path": str(cp),
         "profile": config["profile"],
         "targets": config.get("targets", {}),
         "intake": config.get("intake", {}),
+        "briefing_refreshed": briefing_refreshed,
     }
 
 
@@ -2287,6 +2300,18 @@ def _log_labs(
     scored = [k for k in normalized if k in _SCORED_FIELDS]
     extra = [k for k in normalized if k not in _SCORED_FIELDS]
 
+    # Rebuild briefing so dashboard reflects new labs immediately
+    briefing_refreshed = False
+    try:
+        _cfg = _load_config(user_id)
+        from engine.coaching.briefing import build_briefing
+        briefing = build_briefing(_cfg)
+        with open(data_dir / "briefing.json", "w") as f:
+            json.dump(briefing, f, indent=2, default=str)
+        briefing_refreshed = True
+    except Exception:
+        pass
+
     return {
         "logged": True,
         "date": date,
@@ -2298,6 +2323,7 @@ def _log_labs(
         "warnings": warnings,
         "total_draws": len(data["draws"]),
         "total_latest": len(data["latest"]),
+        "briefing_refreshed": briefing_refreshed,
     }
 
 
@@ -2911,6 +2937,18 @@ def _ingest_health_snapshot(
         import logging
         logging.getLogger("kiso.ingest").warning("wearable_daily SQLite write failed: %s", e)
 
+    # Rebuild briefing so dashboard reflects new snapshot immediately
+    briefing_refreshed = False
+    try:
+        _cfg = _load_config(user_id)
+        from engine.coaching.briefing import build_briefing
+        briefing = build_briefing(_cfg)
+        with open(data_dir / "briefing.json", "w") as f:
+            json.dump(briefing, f, indent=2, default=str)
+        briefing_refreshed = True
+    except Exception:
+        pass
+
     result = {
         "ingested": True,
         "user_id": user_id,
@@ -2920,6 +2958,7 @@ def _ingest_health_snapshot(
         "latest_updated": True,
         "weight_logged": weight_logged,
         "timestamp": ts,
+        "briefing_refreshed": briefing_refreshed,
     }
     if unknown:
         result["unknown_keys_ignored"] = unknown
