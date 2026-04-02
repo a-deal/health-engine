@@ -424,6 +424,48 @@ CREATE TABLE IF NOT EXISTS scheduled_send (
     message_preview TEXT,
     UNIQUE(person_id, schedule_type, sent_date)
 );
+
+-- OAuth: dynamic client registration (Claude iOS registers itself)
+CREATE TABLE IF NOT EXISTS oauth_client (
+    client_id   TEXT PRIMARY KEY,
+    client_json TEXT NOT NULL,  -- full OAuthClientInformationFull as JSON
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+-- OAuth: authorization codes (short-lived, exchanged for tokens)
+CREATE TABLE IF NOT EXISTS oauth_code (
+    code         TEXT PRIMARY KEY,
+    client_id    TEXT NOT NULL,
+    person_id    TEXT NOT NULL,  -- links to person.id for user resolution
+    scopes       TEXT NOT NULL DEFAULT '',  -- space-separated
+    code_challenge TEXT NOT NULL,
+    redirect_uri TEXT NOT NULL,
+    redirect_uri_provided_explicitly INTEGER NOT NULL DEFAULT 1,
+    resource     TEXT,  -- RFC 8707
+    expires_at   REAL NOT NULL,
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+-- OAuth: access and refresh tokens
+CREATE TABLE IF NOT EXISTS oauth_token (
+    token       TEXT PRIMARY KEY,
+    token_type  TEXT NOT NULL,  -- 'access' or 'refresh'
+    client_id   TEXT NOT NULL,
+    person_id   TEXT NOT NULL,  -- links to person.id for user resolution
+    scopes      TEXT NOT NULL DEFAULT '',
+    resource    TEXT,
+    expires_at  REAL,
+    revoked     INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+-- OAuth: magic invite links (pre-generated per user, used at consent page)
+CREATE TABLE IF NOT EXISTS oauth_invite (
+    code        TEXT PRIMARY KEY,
+    person_id   TEXT NOT NULL,  -- links to person.id
+    used_at     TEXT,  -- NULL until used
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
 """
 
 

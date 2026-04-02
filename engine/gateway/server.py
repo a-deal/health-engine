@@ -762,6 +762,101 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
 
         return HTMLResponse(_google_success_page(user_id))
 
+    # --- OAuth consent page (magic invite flow) ---
+    @app.get("/oauth/consent", response_class=HTMLResponse)
+    async def oauth_consent(
+        client_id: str = Query(""),
+        redirect_uri: str = Query(""),
+        state: str = Query(""),
+        code_challenge: str = Query(""),
+        scopes: str = Query(""),
+        resource: str = Query(None),
+    ):
+        """Consent page for MCP OAuth. User enters their invite code."""
+        return HTMLResponse(f"""<!DOCTYPE html>
+<html><head><title>Connect to Health Engine</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body {{ font-family: -apple-system, sans-serif; max-width: 400px; margin: 60px auto; padding: 0 20px; }}
+h1 {{ font-size: 1.4em; }}
+input {{ width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; margin: 8px 0; box-sizing: border-box; }}
+button {{ width: 100%; padding: 14px; font-size: 16px; background: #000; color: #fff; border: none; border-radius: 8px; cursor: pointer; margin-top: 8px; }}
+button:hover {{ background: #333; }}
+.note {{ color: #666; font-size: 0.9em; margin-top: 16px; }}
+</style></head><body>
+<h1>Connect to Health Engine</h1>
+<p>Enter your invite code to allow Claude to access your health data.</p>
+<form method="POST" action="/oauth/consent">
+<input type="hidden" name="client_id" value="{client_id}">
+<input type="hidden" name="redirect_uri" value="{redirect_uri}">
+<input type="hidden" name="state" value="{state}">
+<input type="hidden" name="code_challenge" value="{code_challenge}">
+<input type="hidden" name="scopes" value="{scopes}">
+<input type="hidden" name="resource" value="{resource or ''}">
+<input type="text" name="invite_code" placeholder="Invite code" autofocus required>
+<button type="submit">Connect</button>
+</form>
+<p class="note">Don't have an invite? Ask your health coach.</p>
+</body></html>""")
+
+    @app.post("/oauth/consent")
+    async def oauth_consent_submit(request: Request):
+        """Process consent form: validate invite, generate auth code, redirect."""
+        form = await request.form()
+        invite_code = form.get("invite_code", "")
+        client_id = form.get("client_id", "")
+        redirect_uri = form.get("redirect_uri", "")
+        state = form.get("state")
+        code_challenge = form.get("code_challenge", "")
+        scopes = form.get("scopes", "")
+        resource = form.get("resource") or None
+
+        if not invite_code or not client_id or not redirect_uri:
+            return HTMLResponse("<h1>Missing parameters</h1><p>Please try connecting again from Claude.</p>", status_code=400)
+
+        # Validate invite
+        from engine.gateway.db import get_db as _get_db, init_db as _init_db
+        _init_db()
+        _db = _get_db()
+        invite_row = _db.execute(
+            "SELECT person_id, used_at FROM oauth_invite WHERE code = ?",
+            (invite_code,),
+        ).fetchone()
+
+        if not invite_row:
+            return HTMLResponse("<h1>Invalid invite code</h1><p>Check your code and try again.</p>", status_code=403)
+        if invite_row["used_at"]:
+            return HTMLResponse("<h1>Invite already used</h1><p>Ask your health coach for a new invite.</p>", status_code=403)
+
+        person_id = invite_row["person_id"]
+
+        # Create auth code
+        from engine.gateway.oauth_provider import KisoOAuthProvider
+        provider = KisoOAuthProvider()
+        import asyncio
+        auth_code = await provider.create_authorization_code(
+            client_id=client_id,
+            code_challenge=code_challenge,
+            redirect_uri=redirect_uri,
+            scopes=scopes.split() if scopes else ["health"],
+            person_id=person_id,
+            resource=resource,
+        )
+
+        # Mark invite as used
+        _db.execute(
+            "UPDATE oauth_invite SET used_at = ? WHERE code = ?",
+            (datetime.now().isoformat(), invite_code),
+        )
+        _db.commit()
+
+        # Redirect back to Claude with the auth code
+        from mcp.server.auth.provider import construct_redirect_uri
+        redirect = construct_redirect_uri(redirect_uri, code=auth_code, state=state)
+
+        from starlette.responses import RedirectResponse as _RedirectResponse
+        return _RedirectResponse(url=redirect, status_code=302)
+
     # --- MCP streamable-http transport ---
     # Exposes the health-engine MCP tools over HTTP so remote clients
     # (e.g. Paul via mcp-remote) can connect through Cloudflare Tunnel.
@@ -797,25 +892,54 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
         register_resources(mcp_server)
 
         def _resolve_token_to_user_id(token: str) -> str | None:
-            """Look up a per-user token's health_engine_user_id."""
-            if token not in config.token_persons:
-                return None
-            person_ids = config.token_persons[token]
-            if isinstance(person_ids, str):
-                person_ids = [person_ids]
-            if not person_ids:
-                return None
+            """Look up a token's health_engine_user_id.
+
+            Checks two sources:
+            1. Legacy bearer tokens in config.token_persons
+            2. OAuth access tokens in the oauth_token table
+            """
+            # 1. Legacy bearer token path
+            if token in config.token_persons:
+                person_ids = config.token_persons[token]
+                if isinstance(person_ids, str):
+                    person_ids = [person_ids]
+                if person_ids:
+                    try:
+                        from engine.gateway.db import get_db, init_db
+                        init_db()
+                        db = get_db()
+                        row = db.execute(
+                            "SELECT health_engine_user_id FROM person WHERE id = ? AND deleted_at IS NULL",
+                            (person_ids[0],),
+                        ).fetchone()
+                        if row:
+                            return row["health_engine_user_id"]
+                    except Exception:
+                        pass
+
+            # 2. OAuth access token path
             try:
                 from engine.gateway.db import get_db, init_db
+                import time as _time
                 init_db()
                 db = get_db()
                 row = db.execute(
-                    "SELECT health_engine_user_id FROM person WHERE id = ? AND deleted_at IS NULL",
-                    (person_ids[0],),
+                    "SELECT person_id FROM oauth_token "
+                    "WHERE token = ? AND token_type = 'access' AND revoked = 0 "
+                    "AND (expires_at IS NULL OR expires_at > ?)",
+                    (token, _time.time()),
                 ).fetchone()
-                return row["health_engine_user_id"] if row else None
+                if row:
+                    person_row = db.execute(
+                        "SELECT health_engine_user_id FROM person WHERE id = ? AND deleted_at IS NULL",
+                        (row["person_id"],),
+                    ).fetchone()
+                    if person_row:
+                        return person_row["health_engine_user_id"]
             except Exception:
-                return None
+                pass
+
+            return None
 
         def _validate_token(token: str) -> bool:
             return bool(config.api_token and token == config.api_token)
@@ -846,6 +970,44 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
         )
         app.mount("/mcp", authed_mcp_app)
         logger.info("MCP streamable-http mounted at /mcp")
+
+        # --- OAuth routes for Claude iOS/cloud MCP auth ---
+        try:
+            from pydantic import AnyHttpUrl
+            from starlette.routing import Mount, Route
+            from mcp.server.auth.routes import create_auth_routes, create_protected_resource_routes
+            from mcp.server.auth.settings import ClientRegistrationOptions, RevocationOptions
+            from engine.gateway.oauth_provider import KisoOAuthProvider
+
+            oauth_provider = KisoOAuthProvider()
+            issuer_url = AnyHttpUrl(f"https://{config.tunnel_domain}" if config.tunnel_domain else "http://localhost:18800")
+
+            auth_routes = create_auth_routes(
+                provider=oauth_provider,
+                issuer_url=issuer_url,
+                client_registration_options=ClientRegistrationOptions(
+                    enabled=True,
+                    valid_scopes=["health"],
+                    default_scopes=["health"],
+                ),
+                revocation_options=RevocationOptions(enabled=True),
+            )
+
+            resource_url = AnyHttpUrl(f"https://{config.tunnel_domain}/mcp" if config.tunnel_domain else "http://localhost:18800/mcp")
+            resource_routes = create_protected_resource_routes(
+                resource_url=resource_url,
+                authorization_servers=[issuer_url],
+                scopes_supported=["health"],
+                resource_name="Health Engine",
+            )
+
+            # Mount OAuth routes on the FastAPI app
+            from starlette.routing import Router as StarletteRouter
+            oauth_app = StarletteRouter(routes=auth_routes + resource_routes)
+            app.mount("/", oauth_app)
+            logger.info("OAuth routes mounted (authorize, token, register, metadata)")
+        except Exception as e:
+            logger.warning(f"OAuth routes not mounted: {e}")
     except Exception as e:
         logger.warning(f"MCP streamable-http not mounted: {e}")
 
