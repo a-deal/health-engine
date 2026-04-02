@@ -175,7 +175,7 @@ def build_briefing(config: dict) -> dict:
         profile.zone2_min_per_week = wearable.get("zone2_min_per_week")
 
     # Incorporate latest BP reading into profile for scoring
-    bp_data_for_score = _load_bp_log(data_dir)
+    bp_data_for_score = _load_bp_log(data_dir, person_id=_person_id)
     if bp_data_for_score and len(bp_data_for_score) > 0:
         latest_bp = bp_data_for_score[-1]
         profile.systolic = latest_bp["sys"]
@@ -604,7 +604,7 @@ def build_briefing(config: dict) -> dict:
     )
     # --- ACWR Training Load (Phase 4 of timescale framework) ---
     garmin_workouts_data = _load_json(data_dir / "garmin_workouts.json")
-    strength_log_data = _load_strength_log(data_dir, config)
+    strength_log_data = _load_strength_log(data_dir, config, user_id=_user_id)
     session_log_path = data_dir / "session_log.csv"
     session_log_data = read_csv(session_log_path) if session_log_path.exists() else None
 
@@ -925,13 +925,22 @@ def _load_meals_sqlite(person_id: str | None, date: str | None = None) -> Option
 
 
 def _user_id_from_person(person_id):
+    """Reverse lookup: person.id -> health_engine_user_id."""
     if not person_id:
         return None
-    _map = {
-        "andrew-deal-001": "andrew",
-        "grigoriy-001": "grigoriy",
-    }
-    return _map.get(person_id, person_id)
+    try:
+        from engine.gateway.db import get_db, init_db
+        init_db()
+        db = get_db()
+        row = db.execute(
+            "SELECT health_engine_user_id FROM person WHERE id = ? AND deleted_at IS NULL",
+            (person_id,),
+        ).fetchone()
+        if row and row["health_engine_user_id"]:
+            return row["health_engine_user_id"]
+    except Exception:
+        pass
+    return person_id
 
 
 def _load_weight_log(data_dir: Path, person_id: str | None = None) -> Optional[list]:

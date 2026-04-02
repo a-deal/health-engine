@@ -714,8 +714,10 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
                                             if not args.get("user_id"):
                                                 args["user_id"] = resolved_user_id
                                                 data["params"]["arguments"] = args
-                                                message = {**message, "body": _json.dumps(data).encode()}
+                                                new_body = _json.dumps(data).encode()
+                                                message = {**message, "body": new_body}
                                                 injected = True
+                                                logger.info(f"MCP auth: injected user_id={resolved_user_id} into {data.get('params', {}).get('name', '?')}")
                                     except (ValueError, KeyError, TypeError):
                                         pass
                             return message
