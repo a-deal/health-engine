@@ -43,7 +43,7 @@ cd "$LOCAL_DIR" && git push origin master
 
 # 2. Pull on Mac Mini + sync deps
 echo "Pulling on Mac Mini..."
-ssh "$REMOTE" "cd $REMOTE_DIR && git pull && export PATH=\$HOME/.local/bin:\$PATH && uv sync"
+ssh "$REMOTE" "cd $REMOTE_DIR && git pull && export PATH=\$HOME/.local/bin:\$PATH && uv sync --all-extras"
 
 # 3. Restart API
 echo "Restarting API ($RESTART_FLAG)..."
