@@ -23,6 +23,9 @@ set -euo pipefail
 # Usage (remote from laptop):
 #   ssh mac-mini 'cd ~/src/health-engine && bash scripts/restart-api.sh --hard'
 
+# macOS: allow ObjC runtime in forked workers (httpx/Anthropic SDK triggers this)
+export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+
 SERVICE="com.baseline.gateway"
 PLIST="$HOME/Library/LaunchAgents/${SERVICE}.plist"
 PORT=18800
