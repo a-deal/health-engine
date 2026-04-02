@@ -1,58 +1,49 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Deploy API code to Mac Mini and restart cleanly.
-# Run from laptop.
+# Deploy API code to Mac Mini via git pull and restart.
+#
+# Flow: commit locally -> push to GitHub -> pull on Mac Mini -> restart
+# Mac Mini runs code from git, not rsync'd files.
 #
 # Usage:
-#   ./scripts/deploy-api.sh              # Deploy all API files + restart
+#   ./scripts/deploy-api.sh              # Deploy + graceful restart
 #   ./scripts/deploy-api.sh --test-first # Run tests before deploying
+#   ./scripts/deploy-api.sh --cold       # Deploy + cold restart
 
 REMOTE="mac-mini"
 REMOTE_DIR="~/src/health-engine"
 LOCAL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+RESTART_FLAG="--reload"
 
-# Optionally run tests first
-if [ "${1:-}" = "--test-first" ]; then
-    echo "Running tests..."
-    cd "$LOCAL_DIR" && .venv/bin/python3 -m pytest tests/ -x -q --tb=short || {
-        echo "Tests failed. Aborting deploy."
-        exit 1
-    }
-    echo ""
-fi
+# Parse flags
+for arg in "$@"; do
+    case $arg in
+        --test-first)
+            echo "Running tests..."
+            cd "$LOCAL_DIR" && .venv/bin/python3 -m pytest tests/ -x -q --tb=short || {
+                echo "Tests failed. Aborting deploy."
+                exit 1
+            }
+            echo ""
+            ;;
+        --cold)
+            RESTART_FLAG="--cold"
+            ;;
+    esac
+done
 
-# Sync API code (engine/ and mcp_server/ directories)
-echo "Syncing code to $REMOTE..."
-rsync -az --delete \
-    --exclude='__pycache__' \
-    --exclude='*.pyc' \
-    --exclude='.venv' \
-    --exclude='data/' \
-    --exclude='workspace/' \
-    --exclude='.git' \
-    "$LOCAL_DIR/engine/" "$REMOTE:$REMOTE_DIR/engine/"
+# 1. Push to GitHub
+echo "Pushing to GitHub..."
+cd "$LOCAL_DIR" && git push origin master
 
-rsync -az --delete \
-    --exclude='__pycache__' \
-    --exclude='*.pyc' \
-    "$LOCAL_DIR/mcp_server/" "$REMOTE:$REMOTE_DIR/mcp_server/"
+# 2. Pull on Mac Mini + sync deps
+echo "Pulling on Mac Mini..."
+ssh "$REMOTE" "cd $REMOTE_DIR && git pull && export PATH=\$HOME/.local/bin:\$PATH && uv sync"
 
-rsync -az --delete \
-    --exclude='__pycache__' \
-    "$LOCAL_DIR/dashboard/" "$REMOTE:$REMOTE_DIR/dashboard/"
-
-rsync -az \
-    "$LOCAL_DIR/scripts/restart-api.sh" "$REMOTE:$REMOTE_DIR/scripts/restart-api.sh"
-rsync -az \
-    "$LOCAL_DIR/scripts/run_v1_api.py" "$REMOTE:$REMOTE_DIR/scripts/run_v1_api.py" 2>/dev/null || true
-
-echo "Code synced."
-echo ""
-
-# Restart API on Mac Mini
-echo "Restarting API..."
-ssh "$REMOTE" "cd $REMOTE_DIR && bash scripts/restart-api.sh"
+# 3. Restart API
+echo "Restarting API ($RESTART_FLAG)..."
+ssh "$REMOTE" "cd $REMOTE_DIR && bash scripts/restart-api.sh $RESTART_FLAG"
 
 echo ""
 echo "Deploy complete."
