@@ -595,3 +595,94 @@ class TestToolRegistry:
         # Should not return "unsupported" error for oura
         result = _connect_wearable("oura", user_id="nonexistent_test_user")
         assert "error" not in result or "Unsupported" not in result.get("error", "")
+
+
+# =====================================================================
+# Oura SQLite dual-write tests
+# =====================================================================
+
+
+class TestOuraSqliteWrite:
+    """Verify Oura pull_all writes daily series to wearable_daily."""
+
+    def _setup_db(self, tmp_path):
+        from engine.gateway.db import init_db, get_db, close_db
+        close_db()
+        db_path = tmp_path / "kasane.db"
+        init_db(db_path)
+        db = get_db(db_path)
+        now = datetime.now().isoformat()
+        db.execute(
+            "INSERT INTO person (id, name, health_engine_user_id, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("p-grigoriy", "Grigoriy", "grigoriy", now, now),
+        )
+        db.commit()
+        return db_path
+
+    def test_pull_all_writes_to_wearable_daily(self, tmp_path):
+        """pull_all with person_id should write rows to wearable_daily."""
+        db_path = self._setup_db(tmp_path)
+        client = OuraClient(user_id="grigoriy", data_dir=str(tmp_path / "data"))
+        (tmp_path / "data").mkdir(parents=True, exist_ok=True)
+
+        # Mock all API calls
+        today = date.today().isoformat()
+        yesterday = (date.today() - timedelta(days=1)).isoformat()
+
+        mock_sleep = [
+            {"day": today, "total_sleep_duration": 25200},  # 7hrs
+            {"day": yesterday, "total_sleep_duration": 21600},  # 6hrs
+        ]
+        mock_periods = [
+            {"day": today, "type": "long_sleep", "average_hrv": 45.0,
+             "lowest_heart_rate": 62, "bedtime_start": "2026-04-01T23:00:00+00:00",
+             "total_sleep_duration": 25200},
+            {"day": yesterday, "type": "long_sleep", "average_hrv": 42.0,
+             "lowest_heart_rate": 64, "bedtime_start": "2026-03-31T23:30:00+00:00",
+             "total_sleep_duration": 21600},
+        ]
+        mock_activity = [
+            {"day": today, "steps": 8500},
+            {"day": yesterday, "steps": 7200},
+        ]
+        mock_readiness = []
+
+        with patch("engine.gateway.db._db_path", return_value=db_path), \
+             patch.object(client, "pull_sleep", return_value=mock_sleep), \
+             patch.object(client, "pull_sleep_periods", return_value=mock_periods), \
+             patch.object(client, "pull_activity", return_value=mock_activity), \
+             patch.object(client, "pull_readiness", return_value=mock_readiness):
+            client.pull_all(history=True, history_days=2, person_id="p-grigoriy")
+
+        from engine.gateway.db import get_db
+        db = get_db(db_path)
+        rows = db.execute(
+            "SELECT date, source, rhr, hrv, steps, sleep_hrs FROM wearable_daily "
+            "WHERE person_id = 'p-grigoriy' ORDER BY date"
+        ).fetchall()
+
+        assert len(rows) >= 2
+        sources = {r["source"] for r in rows}
+        assert "oura" in sources
+
+        # Check a row has actual data
+        today_row = [r for r in rows if r["date"] == today]
+        assert len(today_row) == 1
+        assert today_row[0]["source"] == "oura"
+        assert today_row[0]["sleep_hrs"] == 7.0
+        assert today_row[0]["rhr"] == 62.0
+
+    def test_pull_all_without_person_id_skips_sqlite(self, tmp_path):
+        """pull_all without person_id should not touch SQLite."""
+        client = OuraClient(user_id="test", data_dir=str(tmp_path / "data"))
+        (tmp_path / "data").mkdir(parents=True, exist_ok=True)
+
+        with patch.object(client, "pull_sleep", return_value=[]), \
+             patch.object(client, "pull_sleep_periods", return_value=[]), \
+             patch.object(client, "pull_activity", return_value=[]), \
+             patch.object(client, "pull_readiness", return_value=[]):
+            result = client.pull_all()
+
+        # No crash, no SQLite interaction
+        assert result is not None

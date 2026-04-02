@@ -585,6 +585,64 @@ def get_phone_to_user_map(db_path: Path | str | None = None) -> dict[str, dict]:
     return result
 
 
+def write_wearable_daily_row(person_id: str, day: dict, source: str):
+    """Write a single day's wearable data to wearable_daily.
+
+    day dict should have: date (required), plus any of: rhr, hrv, steps,
+    sleep_hrs, deep_sleep_hrs, light_sleep_hrs, rem_sleep_hrs, awake_hrs,
+    sleep_start, sleep_end, calories_total, calories_active, calories_bmr,
+    stress_avg, floors, distance_m, max_hr, min_hr, vo2_max, body_battery, zone2_min.
+    """
+    import uuid as _uuid
+    from datetime import datetime
+
+    snap_date = day["date"]
+    now = datetime.now().isoformat(timespec="seconds")
+    rid = str(_uuid.uuid5(_uuid.NAMESPACE_URL, f"{person_id}:wearable_daily:{snap_date}:{source}"))
+
+    def _sf(v):
+        if v is None or v == "":
+            return None
+        try:
+            return float(v)
+        except (ValueError, TypeError):
+            return None
+
+    def _si(v):
+        if v is None or v == "":
+            return None
+        try:
+            return int(float(v))
+        except (ValueError, TypeError):
+            return None
+
+    db = get_db()
+    db.execute(
+        "INSERT OR REPLACE INTO wearable_daily (id, person_id, date, source, "
+        "rhr, hrv, hrv_weekly_avg, hrv_status, steps, sleep_hrs, deep_sleep_hrs, "
+        "light_sleep_hrs, rem_sleep_hrs, awake_hrs, sleep_start, sleep_end, "
+        "calories_total, calories_active, calories_bmr, stress_avg, floors, "
+        "distance_m, max_hr, min_hr, vo2_max, body_battery, zone2_min, "
+        "created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (rid, person_id, snap_date, source,
+         _sf(day.get("rhr")), _sf(day.get("hrv")),
+         _sf(day.get("hrv_weekly_avg")), day.get("hrv_status"),
+         _si(day.get("steps")), _sf(day.get("sleep_hrs")),
+         _sf(day.get("deep_sleep_hrs")), _sf(day.get("light_sleep_hrs")),
+         _sf(day.get("rem_sleep_hrs")), _sf(day.get("awake_hrs")),
+         day.get("sleep_start"), day.get("sleep_end"),
+         _sf(day.get("calories_total")), _sf(day.get("calories_active")),
+         _sf(day.get("calories_bmr")), _si(day.get("stress_avg")),
+         _sf(day.get("floors")), _sf(day.get("distance_m")),
+         _si(day.get("max_hr")), _si(day.get("min_hr")),
+         _sf(day.get("vo2_max")), _si(day.get("body_battery")),
+         _si(day.get("zone2_min")),
+         now, now),
+    )
+    db.commit()
+
+
 # Entity name -> table name mapping (used by sync)
 ENTITY_TABLES = {
     "person": "person",

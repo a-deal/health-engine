@@ -357,7 +357,7 @@ class OuraClient:
         print("  Zone 2: no data found")
         return None
 
-    def pull_all(self, history: bool = False, history_days: int = 90) -> dict:
+    def pull_all(self, history: bool = False, history_days: int = 90, person_id: str | None = None) -> dict:
         """Pull all Oura metrics. Returns dict compatible with scoring engine.
 
         The output schema matches garmin_latest.json exactly.
@@ -423,7 +423,26 @@ class OuraClient:
                     json.dump(series, f, indent=2)
                 print(f"Saved daily series to {series_path}")
 
+                # Write each day to wearable_daily SQLite
+                if person_id:
+                    self._write_series_to_sqlite(series, person_id)
+
         return oura_data
+
+    def _write_series_to_sqlite(self, series: list[dict], person_id: str):
+        """Write daily series rows to wearable_daily table."""
+        try:
+            from engine.gateway.db import init_db, write_wearable_daily_row
+            init_db()
+            count = 0
+            for day in series:
+                if not day.get("date"):
+                    continue
+                write_wearable_daily_row(person_id, day, source="oura")
+                count += 1
+            print(f"  SQLite: wrote {count} oura rows to wearable_daily.")
+        except Exception as e:
+            print(f"  SQLite wearable_daily write error: {e}", file=sys.stderr)
 
     def _build_daily_series(
         self,

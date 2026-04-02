@@ -677,3 +677,85 @@ class TestToolRegistry:
         # Should not return "unsupported" error for whoop
         result = _connect_wearable("whoop", user_id="nonexistent_test_user")
         assert "error" not in result or "Unsupported" not in result.get("error", "")
+
+
+# =====================================================================
+# WHOOP SQLite dual-write tests
+# =====================================================================
+
+from engine.integrations.whoop import WhoopClient
+
+
+class TestWhoopSqliteWrite:
+    """Verify WHOOP pull_all writes daily series to wearable_daily."""
+
+    def _setup_db(self, tmp_path):
+        from engine.gateway.db import init_db, get_db, close_db
+        close_db()
+        db_path = tmp_path / "kasane.db"
+        init_db(db_path)
+        db = get_db(db_path)
+        now = datetime.now().isoformat()
+        db.execute(
+            "INSERT INTO person (id, name, health_engine_user_id, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("p-grigoriy", "Grigoriy", "grigoriy", now, now),
+        )
+        db.commit()
+        return db_path
+
+    def test_pull_all_writes_to_wearable_daily(self, tmp_path):
+        """pull_all with person_id should write rows to wearable_daily."""
+        db_path = self._setup_db(tmp_path)
+        client = WhoopClient(user_id="grigoriy", data_dir=str(tmp_path / "data"))
+        (tmp_path / "data").mkdir(parents=True, exist_ok=True)
+
+        today = date.today().isoformat()
+        yesterday = (date.today() - timedelta(days=1)).isoformat()
+
+        mock_recovery = [
+            {"created_at": f"{today}T08:00:00+00:00",
+             "score": {"resting_heart_rate": 58.0, "hrv_rmssd_milli": 72.0}},
+            {"created_at": f"{yesterday}T08:00:00+00:00",
+             "score": {"resting_heart_rate": 60.0, "hrv_rmssd_milli": 68.0}},
+        ]
+        mock_sleep = [
+            {"start": f"{yesterday}T23:00:00+00:00", "end": f"{today}T06:30:00+00:00",
+             "nap": False, "score": {"stage_summary": {"total_in_bed_time_milli": 27000000}}},
+        ]
+        mock_workouts = []
+
+        with patch("engine.gateway.db._db_path", return_value=db_path), \
+             patch.object(client, "pull_recovery", return_value=mock_recovery), \
+             patch.object(client, "pull_sleep", return_value=mock_sleep), \
+             patch.object(client, "pull_workouts", return_value=mock_workouts):
+            client.pull_all(history=True, history_days=2, person_id="p-grigoriy")
+
+        from engine.gateway.db import get_db
+        db = get_db(db_path)
+        rows = db.execute(
+            "SELECT date, source, rhr, hrv, sleep_hrs FROM wearable_daily "
+            "WHERE person_id = 'p-grigoriy' ORDER BY date"
+        ).fetchall()
+
+        assert len(rows) >= 1
+        sources = {r["source"] for r in rows}
+        assert "whoop" in sources
+
+        today_row = [r for r in rows if r["date"] == today]
+        assert len(today_row) == 1
+        assert today_row[0]["source"] == "whoop"
+        assert today_row[0]["rhr"] == 58.0
+        assert today_row[0]["hrv"] == 72.0
+
+    def test_pull_all_without_person_id_skips_sqlite(self, tmp_path):
+        """pull_all without person_id should not touch SQLite."""
+        client = WhoopClient(user_id="test", data_dir=str(tmp_path / "data"))
+        (tmp_path / "data").mkdir(parents=True, exist_ok=True)
+
+        with patch.object(client, "pull_recovery", return_value=[]), \
+             patch.object(client, "pull_sleep", return_value=[]), \
+             patch.object(client, "pull_workouts", return_value=[]):
+            result = client.pull_all()
+
+        assert result is not None
