@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.kiso.scheduler</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-c</string>
+        <string>TOKEN="NZCT4pzvxC36OSaCztUYjq2_LAkqdC5_LmTFysa9VAY"; curl -sf -X POST "http://localhost:18800/api/v1/scheduled/morning-brief?token=$TOKEN" >> /tmp/kiso-scheduler.log 2>&amp;1; curl -sf -X POST "http://localhost:18800/api/v1/scheduled/evening-checkin?token=$TOKEN" >> /tmp/kiso-scheduler.log 2>&amp;1; curl -sf -X POST "http://localhost:18800/api/v1/scheduled/weekly-review?token=$TOKEN" >> /tmp/kiso-scheduler.log 2>&amp;1; echo "" >> /tmp/kiso-scheduler.log</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>1800</integer>
+    <key>StandardOutPath</key>
+    <string>/tmp/kiso-scheduler.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/kiso-scheduler.log</string>
+</dict>
+</plist>
