@@ -192,6 +192,46 @@ def _get_or_404(table: str, row_id: str, db=None) -> dict:
     return _row_to_dict(row)
 
 
+# --- Health snapshot endpoint ---
+
+from pydantic import BaseModel
+
+
+class HealthSnapshotRequest(BaseModel):
+    user_id: str
+    metrics: dict
+    timestamp: str | None = None
+
+
+@router.post("/health-snapshot")
+def ingest_health_snapshot(body: HealthSnapshotRequest, request: Request, _token: str = Depends(_verify_token)):
+    """Ingest Apple Health metrics via per-user token auth.
+
+    Accepts the same payload as the legacy /api/ingest_health_snapshot
+    but uses v1 token_persons auth.
+    """
+    t0 = time.monotonic()
+    db = get_db()
+    init_db()
+
+    # Resolve user_id to person_id for access check
+    row = db.execute(
+        "SELECT id FROM person WHERE health_engine_user_id = ? AND deleted_at IS NULL",
+        (body.user_id,),
+    ).fetchone()
+    if row:
+        _check_person_access(request, _token, row["id"])
+
+    from mcp_server.tools import _ingest_health_snapshot
+    result = _ingest_health_snapshot(body.user_id, body.metrics, body.timestamp)
+
+    elapsed = int((time.monotonic() - t0) * 1000)
+    _audit_v1("/api/v1/health-snapshot", "POST", row["id"] if row else None, 200, elapsed,
+              f"user_id={body.user_id} metrics={len(body.metrics)}")
+
+    return result
+
+
 # --- Sync endpoint ---
 
 @router.post("/sync")
@@ -801,13 +841,33 @@ def _load_health_context(user_id: str) -> dict:
         rows = read_csv(weight_path)
         health["weight_recent"] = rows[-14:] if rows else []
 
-    # Latest wearable snapshot
-    for fname in ("garmin_latest.json", "oura_latest.json", "whoop_latest.json", "apple_health_latest.json"):
-        snapshot = _load_json_file(data_dir / fname)
-        if snapshot:
-            health["wearable_snapshot"] = snapshot
-            health["wearable_source"] = fname.replace("_latest.json", "")
-            break
+    # Latest wearable snapshot (SQLite, JSON fallback for users not yet in wearable_daily)
+    try:
+        from engine.gateway.db import get_db
+        _db = get_db()
+        _prow = _db.execute(
+            "SELECT id FROM person WHERE health_engine_user_id = ? AND deleted_at IS NULL",
+            (user_id,),
+        ).fetchone()
+        if _prow:
+            _wrow = _db.execute(
+                "SELECT * FROM wearable_daily WHERE person_id = ? "
+                "ORDER BY date DESC, "
+                "CASE source WHEN 'garmin' THEN 1 WHEN 'apple_health' THEN 2 ELSE 3 END "
+                "LIMIT 1", (_prow["id"],)
+            ).fetchone()
+            if _wrow:
+                health["wearable_snapshot"] = dict(_wrow)
+                health["wearable_source"] = _wrow["source"] or "garmin"
+    except Exception:
+        pass
+    if "wearable_snapshot" not in health:
+        for fname in ("garmin_latest.json", "oura_latest.json", "whoop_latest.json", "apple_health_latest.json"):
+            snapshot = _load_json_file(data_dir / fname)
+            if snapshot:
+                health["wearable_snapshot"] = snapshot
+                health["wearable_source"] = fname.replace("_latest.json", "")
+                break
 
     # Latest labs
     labs = _load_json_file(data_dir / "lab_results.json")

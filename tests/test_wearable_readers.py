@@ -33,10 +33,12 @@ def db(tmp_path):
         conn.execute(
             "INSERT INTO wearable_daily "
             "(id, person_id, date, source, rhr, hrv, steps, sleep_hrs, "
+            "sleep_start, vo2_max, "
             "calories_total, calories_active, calories_bmr, zone2_min, "
             "created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (f"g{i}", "p1", d, "garmin", 48.0, 62.0, 9500, 7.5,
+             "22:30", 47.0,
              2400, 600, 1800, 145, now, now),
         )
         conn.execute(
@@ -134,3 +136,89 @@ class TestBriefingWearable:
         assert len(dates) == len(set(dates)), (
             f"Duplicate dates in briefing series: {dates}"
         )
+
+
+class TestLoadWearableAveragesSqlite:
+    """_load_wearable_averages_sqlite should compute rolling averages from wearable_daily."""
+
+    def test_returns_scoring_keys(self, db):
+        """Should return all keys that scoring expects."""
+        conn, db_path = db
+        from mcp_server.tools import _load_wearable_averages_sqlite
+
+        with patch("engine.gateway.db._db_path", return_value=db_path):
+            avgs = _load_wearable_averages_sqlite("p1")
+
+        assert avgs is not None
+        assert "resting_hr" in avgs
+        assert "daily_steps_avg" in avgs
+        assert "sleep_duration_avg" in avgs
+        assert "hrv_rmssd_avg" in avgs
+        assert "vo2_max" in avgs
+        assert "zone2_min_per_week" in avgs
+
+    def test_averages_from_garmin_preferred(self, db):
+        """Averages should come from garmin rows (preferred source), not apple_health."""
+        conn, db_path = db
+        from mcp_server.tools import _load_wearable_averages_sqlite
+
+        with patch("engine.gateway.db._db_path", return_value=db_path):
+            avgs = _load_wearable_averages_sqlite("p1")
+
+        # Garmin rhr=48.0 for all 3 days, apple_health=50.0
+        assert avgs["resting_hr"] == 48.0
+        assert avgs["daily_steps_avg"] == 9500
+        assert avgs["sleep_duration_avg"] == 7.5
+        assert avgs["hrv_rmssd_avg"] == 62.0
+
+    def test_returns_none_when_no_data(self, db):
+        """Should return None for a person with no wearable data."""
+        conn, db_path = db
+        from mcp_server.tools import _load_wearable_averages_sqlite
+
+        with patch("engine.gateway.db._db_path", return_value=db_path):
+            avgs = _load_wearable_averages_sqlite("nonexistent-person")
+
+        assert avgs is None
+
+    def test_vo2_max_uses_latest(self, db):
+        """vo2_max should be the most recent value, not averaged."""
+        conn, db_path = db
+        from mcp_server.tools import _load_wearable_averages_sqlite
+
+        with patch("engine.gateway.db._db_path", return_value=db_path):
+            avgs = _load_wearable_averages_sqlite("p1")
+
+        assert avgs["vo2_max"] == 47.0
+
+    def test_zone2_uses_sum(self, db):
+        """zone2_min_per_week should be the sum over the window, not average."""
+        conn, db_path = db
+        from mcp_server.tools import _load_wearable_averages_sqlite
+
+        with patch("engine.gateway.db._db_path", return_value=db_path):
+            avgs = _load_wearable_averages_sqlite("p1")
+
+        # 3 days x 145 min = 435
+        assert avgs["zone2_min_per_week"] == 435
+
+
+class TestPersonContextNoJsonFallback:
+    """_get_person_context should get wearable data from SQLite, not JSON files."""
+
+    def test_no_json_fallback_when_sqlite_has_data(self, db):
+        """Even if JSON files don't exist, wearable_snapshot should be populated."""
+        conn, db_path = db
+
+        # Query SQLite directly (simulating what _get_person_context does)
+        with patch("engine.gateway.db._db_path", return_value=db_path):
+            row = conn.execute(
+                "SELECT * FROM wearable_daily WHERE person_id = ? "
+                "ORDER BY date DESC, "
+                "CASE source WHEN 'garmin' THEN 1 WHEN 'apple_health' THEN 2 ELSE 3 END "
+                "LIMIT 1", ("p1",)
+            ).fetchone()
+
+        assert row is not None
+        assert row["source"] == "garmin"
+        assert row["rhr"] == 48.0

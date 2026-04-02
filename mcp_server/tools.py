@@ -204,6 +204,75 @@ _WEARABLE_ATTRS = (
 )
 
 
+def _load_wearable_averages_sqlite(person_id: str, days: int = 7) -> dict | None:
+    """Compute rolling averages from wearable_daily SQLite, matching garmin_latest.json schema.
+
+    Returns dict with: resting_hr, daily_steps_avg, sleep_duration_avg,
+    sleep_regularity_stddev, hrv_rmssd_avg, vo2_max, zone2_min_per_week.
+    Returns None if no data found.
+    """
+    try:
+        from engine.gateway.db import get_db, init_db
+        init_db()
+        db = get_db()
+        # One row per date, garmin preferred
+        rows = db.execute(
+            "SELECT * FROM wearable_daily WHERE person_id = ? "
+            "AND id IN ("
+            "  SELECT id FROM ("
+            "    SELECT id, ROW_NUMBER() OVER ("
+            "      PARTITION BY date "
+            "      ORDER BY CASE source WHEN 'garmin' THEN 1 WHEN 'apple_health' THEN 2 ELSE 3 END"
+            "    ) AS rn FROM wearable_daily WHERE person_id = ?"
+            "  ) WHERE rn = 1"
+            ") ORDER BY date DESC LIMIT ?",
+            (person_id, person_id, days),
+        ).fetchall()
+        if not rows:
+            return None
+
+        def _avg(key):
+            vals = [r[key] for r in rows if r[key] is not None]
+            return round(sum(vals) / len(vals), 1) if vals else None
+
+        def _latest(key):
+            for r in rows:  # already DESC by date
+                if r[key] is not None:
+                    return r[key]
+            return None
+
+        # Sleep regularity: stddev of bedtime in minutes
+        import statistics
+        bedtimes = []
+        for r in rows:
+            st = r["sleep_start"]
+            if st and ":" in st:
+                parts = st.split(":")
+                mins = int(parts[0]) * 60 + int(parts[1])
+                if mins < 720:  # before noon = after midnight
+                    mins += 1440
+                bedtimes.append(mins)
+        stddev = round(statistics.stdev(bedtimes), 1) if len(bedtimes) > 1 else None
+
+        # Zone2: sum over window (weekly total)
+        z2_vals = [r["zone2_min"] for r in rows if r["zone2_min"] is not None]
+        zone2_sum = sum(z2_vals) if z2_vals else None
+
+        return {
+            "resting_hr": _avg("rhr"),
+            "daily_steps_avg": _avg("steps"),
+            "sleep_duration_avg": _avg("sleep_hrs"),
+            "sleep_regularity_stddev": stddev,
+            "hrv_rmssd_avg": _avg("hrv"),
+            "vo2_max": _latest("vo2_max"),
+            "zone2_min_per_week": zone2_sum,
+        }
+    except Exception as e:
+        import logging
+        logging.getLogger("kiso.wearable").warning("_load_wearable_averages_sqlite failed: %s", e)
+        return None
+
+
 def _load_wearable_data(data_dir: Path) -> dict | None:
     """Load wearable data with priority fallback: garmin > oura > whoop > apple_health."""
     sources = [
@@ -389,14 +458,14 @@ def _score(user_id: str | None = None) -> dict:
         profile.phq9_score = profile_cfg["phq9_score"]
 
     data_dir = _data_dir(user_id)
-    wearable_data = _load_wearable_data(data_dir)
+    _pid = _resolve_person_id(user_id)
+    wearable_data = _load_wearable_averages_sqlite(_pid) or _load_wearable_data(data_dir)
     if wearable_data:
         for attr in _WEARABLE_ATTRS:
             val = wearable_data.get(attr)
             if val is not None:
                 setattr(profile, attr, val)
 
-    _pid = _resolve_person_id(user_id)
     bp = _latest_bp_sqlite(_pid)
     if bp:
         profile.systolic, profile.diastolic = bp
@@ -1266,15 +1335,14 @@ def _onboard(user_id: str | None = None) -> dict:
     if profile_cfg.get("phq9_score") is not None:
         profile.phq9_score = profile_cfg["phq9_score"]
 
-    garmin_path = data_dir / "garmin_latest.json"
-    wearable_data = _load_wearable_data(data_dir)
+    _pid = _resolve_person_id(user_id)
+    wearable_data = _load_wearable_averages_sqlite(_pid) or _load_wearable_data(data_dir)
     if wearable_data:
         for attr in _WEARABLE_ATTRS:
             val = wearable_data.get(attr)
             if val is not None:
                 setattr(profile, attr, val)
 
-    _pid = _resolve_person_id(user_id)
     bp = _latest_bp_sqlite(_pid)
     if bp:
         profile.systolic, profile.diastolic = bp
@@ -2930,7 +2998,7 @@ def _get_person_context(person_id: str | None = None, user_id: str | None = None
         if csv_rows:
             health["weight_recent"] = csv_rows[-14:]
 
-    # Wearable snapshot (SQLite for latest day, JSON fallback)
+    # Wearable snapshot (SQLite only — both sources now write to wearable_daily)
     wearable_row = db.execute(
         "SELECT * FROM wearable_daily WHERE person_id = ? "
         "ORDER BY date DESC, "
@@ -2940,14 +3008,6 @@ def _get_person_context(person_id: str | None = None, user_id: str | None = None
     if wearable_row:
         health["wearable_snapshot"] = dict(wearable_row)
         health["wearable_source"] = wearable_row["source"] or "garmin"
-    elif he_uid:
-        data_dir = _data_dir(he_uid)
-        for fname in ("garmin_latest.json", "oura_latest.json", "whoop_latest.json", "apple_health_latest.json"):
-            snapshot = _load_json_file(data_dir / fname)
-            if snapshot:
-                health["wearable_snapshot"] = snapshot
-                health["wearable_source"] = fname.replace("_latest.json", "")
-                break
 
     # Labs (SQLite)
     lab_rows = db.execute(
