@@ -192,6 +192,17 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
 
     app = FastAPI(title="Health Engine Gateway", docs_url=None, redoc_url=None)
 
+    # Logfire OTEL tracing (auto-instruments FastAPI if available)
+    try:
+        import logfire
+        logfire.configure(service_name="kiso", send_to_logfire="if-token-present")
+        logfire.instrument_fastapi(app)
+        logger.info("Logfire tracing initialized")
+    except ImportError:
+        logger.info("logfire not installed, skipping tracing")
+    except Exception as e:
+        logger.warning("Logfire init failed: %s. Continuing without tracing.", e)
+
     from fastapi.middleware.cors import CORSMiddleware
     app.add_middleware(
         CORSMiddleware,
@@ -1336,25 +1347,7 @@ def run_gateway(config: GatewayConfig | None = None):
         config = load_gateway_config()
     init_db()
 
-    # Logfire OTEL tracing (auto-instruments FastAPI if available)
-    _logfire_ok = False
-    try:
-        import logfire
-        logfire.configure(service_name="kiso", send_to_logfire="if-token-present")
-        _logfire_ok = True
-        logger.info("Logfire tracing initialized")
-    except ImportError:
-        logger.info("logfire not installed, skipping tracing")
-    except Exception as e:
-        logger.warning("Logfire init failed: %s. Continuing without tracing.", e)
-
     app = create_app(config)
-
-    if _logfire_ok:
-        try:
-            logfire.instrument_fastapi(app)
-        except Exception:
-            pass
 
     logger.info("Health Engine Gateway starting on port %d", config.port)
     if config.tunnel_domain:
