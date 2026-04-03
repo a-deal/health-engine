@@ -631,20 +631,22 @@ def _log_weight(weight_lbs: float, date: str | None = None, user_id: str | None 
 
     # SQLite write (new)
     person_id = _resolve_person_id(user_id)
+    storage_lbs = weight_lbs
     if person_id:
-        from engine.gateway.db import get_db, init_db
+        from engine.gateway.db import get_db, init_db, weight_to_lbs
         init_db()
         db = get_db()
+        storage_lbs = weight_to_lbs(weight_lbs, db, person_id)
         now = datetime.now().isoformat()
         rid = str(_uuid.uuid5(_uuid.NAMESPACE_URL, f"{person_id}:weight_entry:{date}"))
         db.execute(
             "INSERT OR REPLACE INTO weight_entry (id, person_id, date, weight_lbs, source, created_at, updated_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (rid, person_id, date, weight_lbs, "mcp", now, now),
+            (rid, person_id, date, storage_lbs, "mcp", now, now),
         )
         db.commit()
 
-    return {"logged": True, "date": date, "weight_lbs": weight_lbs}
+    return {"logged": True, "date": date, "weight_lbs": storage_lbs}
 
 
 def _log_bp(systolic: int, diastolic: int, date: str | None = None, user_id: str | None = None) -> dict:
@@ -2036,6 +2038,7 @@ def _setup_profile(
     alcohol_use: str | None = None,
     tobacco_use: str | None = None,
     equipment: list[str] | None = None,
+    unit_system: str | None = None,
     user_id: str | None = None,
 ) -> dict:
     cp = _config_path(user_id)
@@ -2100,8 +2103,25 @@ def _setup_profile(
             if val is not None:
                 config["intake"][key] = val
 
+    if unit_system is not None:
+        config.setdefault("profile", {})
+        config["profile"]["unit_system"] = unit_system
+
     with open(cp, "w") as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+    # Persist unit_system to person table in SQLite
+    if unit_system is not None:
+        person_id = _resolve_person_id(user_id)
+        if person_id:
+            from engine.gateway.db import get_db, init_db
+            init_db()
+            db = get_db()
+            db.execute(
+                "UPDATE person SET unit_system = ?, updated_at = ? WHERE id = ?",
+                (unit_system, datetime.now().isoformat(), person_id),
+            )
+            db.commit()
 
     data_dir = _data_dir(user_id)
     data_dir.mkdir(parents=True, exist_ok=True)

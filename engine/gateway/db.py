@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS person (
     channel TEXT,
     channel_target TEXT,
     wearables_json TEXT DEFAULT '[]',
+    unit_system TEXT NOT NULL DEFAULT 'imperial',  -- 'imperial' or 'metric'
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     deleted_at TEXT
@@ -522,6 +523,7 @@ def _migrate(conn: sqlite3.Connection):
         "email": "ALTER TABLE person ADD COLUMN email TEXT",
         "timezone": "ALTER TABLE person ADD COLUMN timezone TEXT DEFAULT 'America/Los_Angeles'",
         "role": "ALTER TABLE person ADD COLUMN role TEXT DEFAULT 'user'",
+        "unit_system": "ALTER TABLE person ADD COLUMN unit_system TEXT NOT NULL DEFAULT 'imperial'",
     }
     dirty = False
     for col, sql in migrations.items():
@@ -646,6 +648,25 @@ def get_user(user_id: str, db_path: Path | str | None = None) -> dict | None:
         "timezone": r["timezone"] or "America/Los_Angeles",
         "role": r["role"] or "user",
     }
+
+
+KG_TO_LBS = 2.20462
+
+
+def get_unit_system(db, person_id: str) -> str:
+    """Return 'metric' or 'imperial' for a person. Defaults to 'imperial'."""
+    row = db.execute(
+        "SELECT unit_system FROM person WHERE id = ? AND deleted_at IS NULL",
+        (person_id,),
+    ).fetchone()
+    return row[0] if row and row[0] else "imperial"
+
+
+def weight_to_lbs(value: float, db, person_id: str) -> float:
+    """Convert a weight value to lbs based on the person's unit system."""
+    if get_unit_system(db, person_id) == "metric":
+        return value * KG_TO_LBS
+    return value
 
 
 def get_phone_to_user_map(db_path: Path | str | None = None) -> dict[str, dict]:
