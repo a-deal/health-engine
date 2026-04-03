@@ -241,14 +241,38 @@ def build_session_context(user_id: str) -> str:
     except Exception:
         pass
 
+    # Pull recent text conversation so Milo can pick up where they left off
+    recent_convo = ""
+    try:
+        init_db()
+        db = get_db()
+        rows = db.execute(
+            "SELECT role, sender_name, content, channel, timestamp "
+            "FROM conversation_message "
+            "WHERE user_id = ? AND channel != 'voice' "
+            "ORDER BY id DESC LIMIT 8",
+            (user_id,),
+        ).fetchall()
+        if rows:
+            lines = []
+            for r in reversed(rows):
+                label = name if r["role"] == "user" else "Milo"
+                ch = r["channel"] or "text"
+                lines.append(f"[{ch}] {label}: {r['content'][:300]}")
+            recent_convo = "\n".join(lines)
+    except Exception:
+        pass
+
     return (
         f"You are Milo, {name}'s health coach. Today is {today}.\n\n"
         f"Health data:\n{health_context}\n\n"
         + (f"Coverage score:\n{score_context}\n\n" if score_context else "")
-        + "OPENING: Greet them by name. You're their coach, you've been watching their data. "
-        "Lead with one specific thing from their numbers: a win or something to fix. "
-        "Then tell them what you'd focus on today. Be opinionated. Don't ask what they want "
-        "to talk about. Tell them what matters based on the data.\n\n"
+        + (f"Recent text conversation (pick up naturally from this):\n{recent_convo}\n\n" if recent_convo else "")
+        + "OPENING: Greet them by name. You're their coach, you've been texting with them. "
+        "If there's recent text conversation above, pick up from it naturally. Reference "
+        "something specific they said or logged recently. Then lead with one thing from "
+        "their numbers: a win or something to fix. Be opinionated. Don't ask what they want "
+        "to talk about. Tell them what matters.\n\n"
         "VOICE RULES:\n"
         "- You are a COACH, not a therapist, not a thought partner. Coaches tell you what to do.\n"
         "- Be authoritative. Say 'here's what we're doing' not 'what do you think about'.\n"
