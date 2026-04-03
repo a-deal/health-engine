@@ -1328,6 +1328,9 @@ def run_gateway(config: GatewayConfig | None = None):
     """Start the gateway server (blocking)."""
     import uvicorn
     from .db import init_db
+    from .log_config import configure_logging
+
+    configure_logging()
 
     if config is None:
         config = load_gateway_config()
@@ -1353,7 +1356,7 @@ def run_gateway(config: GatewayConfig | None = None):
         except Exception:
             pass
 
-    print(f"Health Engine Gateway starting on port {config.port}")
+    logger.info("Health Engine Gateway starting on port %d", config.port)
     if config.tunnel_domain:
-        print(f"Tunnel domain: https://{config.tunnel_domain}")
+        logger.info("Tunnel domain: https://%s", config.tunnel_domain)
     uvicorn.run(app, host="0.0.0.0", port=config.port, log_level="info")

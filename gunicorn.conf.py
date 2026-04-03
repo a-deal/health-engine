@@ -34,10 +34,43 @@ timeout = 120
 # Preload app in master process (shared memory, faster worker spawn)
 preload_app = True
 
-# Logging
+# Logging — structured JSON to stdout (see engine/gateway/log_config.py)
 accesslog = "-"
 errorlog = "-"
 loglevel = "info"
+
+logconfig_dict = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "json": {
+            "()": "engine.gateway.log_config.JsonFormatter",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+            "formatter": "json",
+        },
+    },
+    "root": {
+        "level": "INFO",
+        "handlers": ["console"],
+    },
+    "loggers": {
+        "gunicorn.error": {
+            "level": "INFO",
+            "handlers": ["console"],
+            "propagate": False,
+        },
+        "gunicorn.access": {
+            "level": "INFO",
+            "handlers": ["console"],
+            "propagate": False,
+        },
+    },
+}
 
 
 def on_starting(server):
