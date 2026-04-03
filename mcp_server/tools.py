@@ -3388,21 +3388,27 @@ def _get_conversations(
     from engine.gateway.db import get_db
 
     conn = get_db()
+    # Exclude raw voice turns (milo-voice, user_id as sender in voice channel).
+    # Keep voice summaries (milo-voice-summary) so text-based Milo has call context
+    # without being flooded by every spoken turn.
+    voice_filter = "AND NOT (channel = 'voice' AND sender_name != 'milo-voice-summary')"
     if user_id:
         rows = conn.execute(
-            """SELECT user_id, role, content, sender_name, channel,
+            f"""SELECT user_id, role, content, sender_name, channel,
                       session_key, timestamp
                FROM conversation_message
                WHERE user_id = ? AND timestamp >= datetime('now', ?)
+               {voice_filter}
                ORDER BY timestamp""",
             (user_id, f"-{days} days"),
         ).fetchall()
     else:
         rows = conn.execute(
-            """SELECT user_id, role, content, sender_name, channel,
+            f"""SELECT user_id, role, content, sender_name, channel,
                       session_key, timestamp
                FROM conversation_message
                WHERE timestamp >= datetime('now', ?)
+               {voice_filter}
                ORDER BY user_id, timestamp""",
             (f"-{days} days",),
         ).fetchall()
@@ -3493,6 +3499,56 @@ def _search_podcasts(query: str, limit: int = 5, podcast_dir: str | None = None)
 
 
 # =====================================================================
+# Coaching outcome tools (Phase B: conversational hypothesis recording)
+# =====================================================================
+
+def _record_hypothesis_tool(
+    hypothesis: str,
+    metric_key: str,
+    user_id: str | None = None,
+) -> dict:
+    """Record a behavior change hypothesis from a coaching conversation.
+
+    Called by Milo when making a measurable coaching suggestion.
+    Computes a 7-day baseline for the metric so we can measure impact later.
+    """
+    from engine.gateway.db import get_db, init_db
+    from engine.coaching.outcomes import record_hypothesis
+
+    init_db()
+    person_id = _resolve_person_id(user_id)
+    if not person_id:
+        return {"status": "error", "message": f"Person not found for user_id={user_id}"}
+
+    try:
+        outcome = record_hypothesis(get_db(), person_id, hypothesis, metric_key)
+        return {"status": "recorded", "outcome": outcome}
+    except ValueError as e:
+        return {"status": "error", "message": str(e)}
+
+
+def _get_outcomes_tool(
+    user_id: str | None = None,
+    days: int = 30,
+) -> dict:
+    """Get coaching outcomes (hypotheses + measured deltas) for a user.
+
+    Returns both measured and unmeasured outcomes within the last N days.
+    Use this to review whether past coaching suggestions actually moved the needle.
+    """
+    from engine.gateway.db import get_db, init_db
+    from engine.coaching.outcomes import get_outcomes
+
+    init_db()
+    person_id = _resolve_person_id(user_id)
+    if not person_id:
+        return {"status": "error", "message": f"Person not found for user_id={user_id}"}
+
+    outcomes = get_outcomes(get_db(), person_id, days=days)
+    return {"count": len(outcomes), "outcomes": outcomes}
+
+
+# =====================================================================
 # Tool registry for HTTP API access
 # =====================================================================
 
@@ -3546,6 +3602,8 @@ TOOL_REGISTRY = {
     "get_workout_program": _get_workout_program,
     "get_workout_history": _get_workout_history,
     "search_podcasts": _search_podcasts,
+    "record_hypothesis": _record_hypothesis_tool,
+    "get_outcomes": _get_outcomes_tool,
     # Excluded from HTTP: auth_garmin (interactive), auth_oura (interactive),
     # auth_whoop (interactive), open_dashboard (browser)
 }
@@ -3952,6 +4010,34 @@ def register_tools(mcp: FastMCP):
     def get_conversations(user_id: str | None = None, days: int = 7) -> dict:
         """Get recent conversation history for a user. Returns all messages (user + assistant) from the last N days. Call this at the start of a session to understand what you have already discussed with this user. If user_id is omitted, returns conversations for all users."""
         return _get_conversations(_effective_user_id(user_id), days)
+
+    @mcp.tool()
+    def record_hypothesis(hypothesis: str, metric_key: str, user_id: str | None = None) -> dict:
+        """Record a behavior change hypothesis when you make a measurable coaching suggestion.
+        Call this when you advise a specific, trackable change (e.g. 'try getting to bed by 10pm',
+        'add 10 min of zone 2 after your lifts'). The system records a 7-day baseline for the
+        metric and measures the delta after 24 hours automatically.
+
+        Args:
+            hypothesis: Short description of the expected change (e.g. 'improve sleep duration')
+            metric_key: Which wearable metric to track. Valid keys: rhr, hrv, steps, sleep_hrs,
+                deep_sleep_hrs, zone2_min, stress_avg, body_battery, calories_total, vo2_max, etc.
+            user_id: User identifier (optional, auto-resolved from auth context)
+        """
+        return _record_hypothesis_tool(hypothesis, metric_key, _effective_user_id(user_id))
+
+    @mcp.tool()
+    def get_outcomes(user_id: str | None = None, days: int = 30) -> dict:
+        """Review coaching outcomes: past hypotheses and whether they moved the needle.
+        Returns both measured (with deltas) and unmeasured outcomes from the last N days.
+        Use this to inform future coaching: if a suggestion worked, reinforce it.
+        If it didn't, try a different approach.
+
+        Args:
+            user_id: User identifier (optional, auto-resolved from auth context)
+            days: How many days of history to return (default 30)
+        """
+        return _get_outcomes_tool(_effective_user_id(user_id), days)
 
 def register_resources(mcp: FastMCP):
     """Register MCP resources (readable documents)."""

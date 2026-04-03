@@ -270,23 +270,32 @@ class TestSaveTranscript:
         """)
         return db
 
-    def test_saves_turns(self):
+    def test_saves_raw_turns_plus_summary(self):
         db = self._make_db()
         tc = TranscriptCollector()
         tc.add_user_transcript("How did I sleep?")
         tc.add_delta("You slept 7.2 hours.")
         tc.finalize_assistant_turn()
 
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text="Discussed sleep. Andrew slept 7.2 hours.")]
+
         with patch("engine.gateway.voice_bridge.init_db", return_value=None):
             with patch("engine.gateway.voice_bridge.get_db", return_value=db):
-                save_transcript("andrew", "MS123", tc)
+                with patch("anthropic.Anthropic") as mock_anthropic:
+                    mock_anthropic.return_value.messages.create.return_value = mock_response
+                    save_transcript("andrew", "MS123", tc)
 
         rows = db.execute("SELECT * FROM conversation_message ORDER BY id").fetchall()
-        assert len(rows) == 2
+        # 2 raw turns + 1 summary = 3 rows
+        assert len(rows) == 3
         assert rows[0]["role"] == "user"
         assert rows[0]["content"] == "How did I sleep?"
         assert rows[1]["role"] == "assistant"
         assert rows[1]["content"] == "You slept 7.2 hours."
+        # Summary row
+        assert rows[2]["sender_name"] == "milo-voice-summary"
+        assert "7.2 hours" in rows[2]["content"]
 
     def test_uses_voice_channel(self):
         db = self._make_db()
@@ -295,9 +304,14 @@ class TestSaveTranscript:
         tc.add_delta("hi")
         tc.finalize_assistant_turn()
 
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text="Brief greeting exchange.")]
+
         with patch("engine.gateway.voice_bridge.init_db", return_value=None):
             with patch("engine.gateway.voice_bridge.get_db", return_value=db):
-                save_transcript("andrew", "MS456", tc)
+                with patch("anthropic.Anthropic") as mock_anthropic:
+                    mock_anthropic.return_value.messages.create.return_value = mock_response
+                    save_transcript("andrew", "MS456", tc)
 
         rows = db.execute("SELECT channel FROM conversation_message").fetchall()
         assert all(r["channel"] == "voice" for r in rows)
@@ -307,11 +321,16 @@ class TestSaveTranscript:
         tc = TranscriptCollector()
         tc.add_user_transcript("test")
 
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text="Test call.")]
+
         with patch("engine.gateway.voice_bridge.init_db", return_value=None):
             with patch("engine.gateway.voice_bridge.get_db", return_value=db):
-                save_transcript("andrew", "MS789", tc)
+                with patch("anthropic.Anthropic") as mock_anthropic:
+                    mock_anthropic.return_value.messages.create.return_value = mock_response
+                    save_transcript("andrew", "MS789", tc)
 
-        row = db.execute("SELECT session_key FROM conversation_message").fetchone()
+        row = db.execute("SELECT session_key FROM conversation_message LIMIT 1").fetchone()
         assert row["session_key"] == "voice:MS789"
 
     def test_empty_transcript_noops(self):
@@ -324,6 +343,87 @@ class TestSaveTranscript:
 
         rows = db.execute("SELECT * FROM conversation_message").fetchall()
         assert len(rows) == 0
+
+    def test_summary_fallback_on_llm_failure(self):
+        """If Haiku fails, raw turns still saved, no summary row."""
+        db = self._make_db()
+        tc = TranscriptCollector()
+        tc.add_user_transcript("How's my score?")
+        tc.add_delta("83 percent coverage.")
+        tc.finalize_assistant_turn()
+
+        with patch("engine.gateway.voice_bridge.init_db", return_value=None):
+            with patch("engine.gateway.voice_bridge.get_db", return_value=db):
+                with patch("anthropic.Anthropic", side_effect=Exception("API down")):
+                    save_transcript("andrew", "MS999", tc)
+
+        rows = db.execute("SELECT * FROM conversation_message ORDER BY id").fetchall()
+        assert len(rows) == 2  # raw turns only, no summary
+
+
+# --- Layer 5b: Conversation history filters voice raw turns ---
+
+
+class TestGetConversationsVoiceFiltering:
+
+    def _make_db_with_messages(self):
+        db = sqlite3.connect(":memory:")
+        db.row_factory = sqlite3.Row
+        db.execute("""
+            CREATE TABLE conversation_message (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                sender_id TEXT,
+                sender_name TEXT,
+                channel TEXT,
+                session_key TEXT,
+                message_id TEXT,
+                timestamp TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+        now = "2026-04-03T12:00:00Z"
+        # WhatsApp message
+        db.execute(
+            "INSERT INTO conversation_message (user_id, role, content, sender_name, channel, session_key, timestamp, created_at) VALUES (?,?,?,?,?,?,?,?)",
+            ("andrew", "user", "Logged 2 protein shakes", "Andrew", "whatsapp", "wa:123", now, now),
+        )
+        # Voice raw turns
+        db.execute(
+            "INSERT INTO conversation_message (user_id, role, content, sender_name, channel, session_key, timestamp, created_at) VALUES (?,?,?,?,?,?,?,?)",
+            ("andrew", "user", "How did I sleep?", "andrew", "voice", "voice:MS1", now, now),
+        )
+        db.execute(
+            "INSERT INTO conversation_message (user_id, role, content, sender_name, channel, session_key, timestamp, created_at) VALUES (?,?,?,?,?,?,?,?)",
+            ("andrew", "assistant", "You slept 6 hours.", "milo-voice", "voice", "voice:MS1", now, now),
+        )
+        # Voice summary
+        db.execute(
+            "INSERT INTO conversation_message (user_id, role, content, sender_name, channel, session_key, timestamp, created_at) VALUES (?,?,?,?,?,?,?,?)",
+            ("andrew", "assistant", "Discussed sleep duration. Andrew slept 6 hours, below 7hr target.", "milo-voice-summary", "voice", "voice:MS1", now, now),
+        )
+        db.commit()
+        return db
+
+    def test_filters_raw_voice_keeps_summary(self):
+        db = self._make_db_with_messages()
+
+        with patch("engine.gateway.db.get_db", return_value=db):
+            from mcp_server.tools import _get_conversations
+            result = _get_conversations("andrew", days=7)
+
+        messages = result["conversations"]["andrew"]
+        contents = [m["content"] for m in messages]
+
+        # WhatsApp message: kept
+        assert "Logged 2 protein shakes" in contents
+        # Voice summary: kept
+        assert any("Discussed sleep" in c for c in contents)
+        # Voice raw turns: filtered out
+        assert "How did I sleep?" not in contents
+        assert "You slept 6 hours." not in contents
 
 
 # --- Layer 6: TwiML Incoming Call Handler ---

@@ -294,7 +294,9 @@ def build_session_context(user_id: str) -> str:
 
 
 def save_transcript(user_id: str, stream_sid: str, transcript: TranscriptCollector):
-    """Save voice call transcript to conversation_message table."""
+    """Save raw voice turns + Haiku summary to conversation_message."""
+    from anthropic import Anthropic
+
     text = transcript.full_transcript()
     if not text:
         return
@@ -303,6 +305,9 @@ def save_transcript(user_id: str, stream_sid: str, transcript: TranscriptCollect
     db = get_db()
 
     now = datetime.now(timezone.utc).isoformat()
+    session_key = f"voice:{stream_sid}"
+
+    # Save raw turns
     for role, content in transcript._turns:
         sender_name = "milo-voice" if role == "assistant" else user_id
         sender_id = "voice_bridge" if role == "assistant" else user_id
@@ -312,8 +317,35 @@ def save_transcript(user_id: str, stream_sid: str, transcript: TranscriptCollect
                 session_key, message_id, timestamp, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (user_id, role, content, sender_id, sender_name, "voice",
-             f"voice:{stream_sid}", "", now, now),
+             session_key, "", now, now),
         )
+
+    # Generate summary via Haiku (cheap, fast)
+    try:
+        client = Anthropic()
+        resp = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=150,
+            system=(
+                "Summarize this voice coaching call in 2-3 sentences. "
+                "Include: what was discussed, any decisions or commitments made, "
+                "and any data logged. Be specific with numbers. No filler."
+            ),
+            messages=[{"role": "user", "content": text}],
+        )
+        summary = resp.content[0].text
+
+        db.execute(
+            """INSERT INTO conversation_message
+               (user_id, role, content, sender_id, sender_name, channel,
+                session_key, message_id, timestamp, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, "assistant", summary, "voice_bridge", "milo-voice-summary",
+             "voice", session_key, "", now, now),
+        )
+    except Exception as e:
+        logger.warning("Failed to generate voice call summary: %s", e)
+
     db.commit()
 
 
