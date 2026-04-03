@@ -3396,6 +3396,74 @@ def _get_conversations(
 
 
 # =====================================================================
+# Podcast search
+# =====================================================================
+
+_DEFAULT_PODCAST_DIR = str(Path.home() / "src" / "daily-brief" / "data" / "podcasts")
+
+
+def _search_podcasts(query: str, limit: int = 5, podcast_dir: str | None = None) -> list[dict]:
+    """Search podcast transcripts for a query string.
+
+    Returns matching passages with episode metadata and surrounding context.
+    """
+    import re
+
+    base = Path(podcast_dir or _DEFAULT_PODCAST_DIR)
+    transcripts_dir = base / "transcripts"
+    summaries_dir = base / "summaries"
+
+    if not transcripts_dir.exists():
+        return []
+
+    pattern = re.compile(re.escape(query), re.IGNORECASE)
+    results = []
+
+    for transcript_file in sorted(transcripts_dir.glob("*.txt")):
+        video_id = transcript_file.stem
+        lines = transcript_file.read_text().splitlines()
+
+        # Find matching lines
+        match_indices = [i for i, line in enumerate(lines) if pattern.search(line)]
+        if not match_indices:
+            continue
+
+        # Build context: 3 lines before and after each match, merged
+        context_indices = set()
+        for idx in match_indices:
+            for offset in range(-3, 4):
+                ci = idx + offset
+                if 0 <= ci < len(lines):
+                    context_indices.add(ci)
+        context = "\n".join(lines[i] for i in sorted(context_indices))
+
+        # Load metadata from summary
+        title, channel, date = video_id, "Unknown", ""
+        summary_file = summaries_dir / f"{video_id}.md"
+        if summary_file.exists():
+            for sline in summary_file.read_text().splitlines():
+                if sline.startswith("title:"):
+                    title = sline.split(":", 1)[1].strip().strip('"')
+                elif sline.startswith("channel:"):
+                    channel = sline.split(":", 1)[1].strip().strip('"')
+                elif sline.startswith("date:"):
+                    date = sline.split(":", 1)[1].strip().strip('"')
+
+        results.append({
+            "video_id": video_id,
+            "title": title,
+            "channel": channel,
+            "date": date,
+            "matches": len(match_indices),
+            "context": context,
+        })
+
+    # Sort by match density (most matches first)
+    results.sort(key=lambda r: r["matches"], reverse=True)
+    return results[:limit]
+
+
+# =====================================================================
 # Tool registry for HTTP API access
 # =====================================================================
 
@@ -3448,6 +3516,7 @@ TOOL_REGISTRY = {
     "log_workout": _log_workout,
     "get_workout_program": _get_workout_program,
     "get_workout_history": _get_workout_history,
+    "search_podcasts": _search_podcasts,
     # Excluded from HTTP: auth_garmin (interactive), auth_oura (interactive),
     # auth_whoop (interactive), open_dashboard (browser)
 }
@@ -3905,3 +3974,8 @@ def _save_coaching_message(
         'person_id': person_id,
         'syncs_to_ios': True,
     }
+
+    @mcp.tool()
+    def search_podcasts(query: str, limit: int = 5) -> list[dict]:
+        """Search podcast transcripts by keyword. Returns matching passages with episode title, channel, date, and surrounding context. Use to find what operators and thinkers have said about a topic. Examples: 'pricing strategy', 'talent density', 'local-first', 'owner-operator'. 100+ episodes from All-In, Acquired, Dwarkesh, Local First FM, and more."""
+        return _search_podcasts(query, limit)
