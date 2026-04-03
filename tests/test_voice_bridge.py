@@ -188,60 +188,56 @@ class TestBuildSessionContext:
         return mock_db
 
     def test_includes_coaching_style(self):
-        with patch("mcp_server.tools._get_daily_snapshot", side_effect=Exception, create=True):
-            with patch("mcp_server.tools._get_protocols", side_effect=Exception, create=True):
+        with patch("mcp_server.tools._checkin", side_effect=Exception, create=True):
+            with patch("mcp_server.tools._score", side_effect=Exception, create=True):
                 with patch("engine.gateway.voice_bridge.init_db", return_value=None):
                     with patch("engine.gateway.voice_bridge.get_db", return_value=self._mock_db()):
                         ctx = build_session_context("andrew")
-        assert "direct, warm, energized" in ctx
+        assert "Direct, warm, data-grounded" in ctx
         assert "em dashes" in ctx
 
     def test_includes_date(self):
         today = datetime.now().strftime("%Y-%m-%d")
-        with patch("mcp_server.tools._get_daily_snapshot", side_effect=Exception, create=True):
-            with patch("mcp_server.tools._get_protocols", side_effect=Exception, create=True):
+        with patch("mcp_server.tools._checkin", side_effect=Exception, create=True):
+            with patch("mcp_server.tools._score", side_effect=Exception, create=True):
                 with patch("engine.gateway.voice_bridge.init_db", return_value=None):
                     with patch("engine.gateway.voice_bridge.get_db", return_value=self._mock_db()):
                         ctx = build_session_context("andrew")
         assert today in ctx
 
     def test_includes_client_name(self):
-        with patch("mcp_server.tools._get_daily_snapshot", side_effect=Exception, create=True):
-            with patch("mcp_server.tools._get_protocols", side_effect=Exception, create=True):
+        with patch("mcp_server.tools._checkin", side_effect=Exception, create=True):
+            with patch("mcp_server.tools._score", side_effect=Exception, create=True):
                 with patch("engine.gateway.voice_bridge.init_db", return_value=None):
                     with patch("engine.gateway.voice_bridge.get_db", return_value=self._mock_db("Andrew")):
                         ctx = build_session_context("andrew")
         assert "Andrew" in ctx
 
-    def test_includes_snapshot_data(self):
-        snapshot = {
-            "garmin": {"steps": 8500, "heart_rate": 62, "body_battery": 75},
-            "meals": {"totals": {"protein_g": 120}},
-            "calorie_balance": {"status": "deficit", "surplus_deficit": -300},
+    def test_includes_checkin_data(self):
+        checkin = {
+            "garmin": {"hrv_rmssd_avg": 64.7, "resting_hr": 48.4, "sleep_duration_avg": 6.0},
+            "coverage_score": 83,
         }
-        with patch("mcp_server.tools._get_daily_snapshot", return_value=snapshot, create=True):
-            with patch("mcp_server.tools._get_protocols", return_value=[], create=True):
+        with patch("mcp_server.tools._checkin", return_value=checkin, create=True):
+            with patch("mcp_server.tools._score", return_value={}, create=True):
                 with patch("engine.gateway.voice_bridge.init_db", return_value=None):
                     with patch("engine.gateway.voice_bridge.get_db", return_value=self._mock_db("Andrew")):
                         ctx = build_session_context("andrew")
-        assert "8500" in ctx
-        assert "62" in ctx
-        assert "120" in ctx
+        assert "64.7" in ctx
+        assert "48.4" in ctx
 
-    def test_includes_protocols(self):
-        protocols = [{"protocol": "Sleep Optimization"}, {"protocol": "Strength Base"}]
-        with patch("mcp_server.tools._get_daily_snapshot", side_effect=Exception, create=True):
-            with patch("mcp_server.tools._get_protocols", return_value=protocols, create=True):
+    def test_includes_score(self):
+        with patch("mcp_server.tools._checkin", return_value={}, create=True):
+            with patch("mcp_server.tools._score", return_value={"coverage_score": 83}, create=True):
                 with patch("engine.gateway.voice_bridge.init_db", return_value=None):
                     with patch("engine.gateway.voice_bridge.get_db", return_value=self._mock_db("Andrew")):
                         ctx = build_session_context("andrew")
-        assert "Sleep Optimization" in ctx
-        assert "Strength Base" in ctx
+        assert "coverage_score" in ctx
 
     def test_handles_all_failures_gracefully(self):
         """Even if everything fails, we get a valid prompt."""
-        with patch("mcp_server.tools._get_daily_snapshot", side_effect=Exception("boom"), create=True):
-            with patch("mcp_server.tools._get_protocols", side_effect=Exception("boom"), create=True):
+        with patch("mcp_server.tools._checkin", side_effect=Exception("boom"), create=True):
+            with patch("mcp_server.tools._score", side_effect=Exception("boom"), create=True):
                 with patch("engine.gateway.voice_bridge.init_db", side_effect=Exception("no db")):
                     ctx = build_session_context("andrew")
         assert "Milo" in ctx

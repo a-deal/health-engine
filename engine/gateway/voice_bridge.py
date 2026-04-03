@@ -209,7 +209,7 @@ def dispatch_tool_call(name: str, args: dict, user_id: str) -> str:
 
 def build_session_context(user_id: str) -> str:
     """Build OpenAI system prompt with client context."""
-    from mcp_server.tools import _get_daily_snapshot, _get_protocols
+    from mcp_server.tools import _checkin, _score
 
     name = user_id  # fallback
     try:
@@ -226,55 +226,36 @@ def build_session_context(user_id: str) -> str:
 
     today = datetime.now().strftime("%Y-%m-%d")
 
-    snapshot_summary = "No data available."
+    # Use _checkin for full context (works without live Garmin auth)
+    health_context = "No health data available."
     try:
-        snapshot = _get_daily_snapshot(user_id=user_id)
-        parts = []
-        garmin = snapshot.get("garmin", {})
-        if garmin:
-            if garmin.get("steps"):
-                parts.append(f"Steps: {garmin['steps']}")
-            if garmin.get("heart_rate"):
-                parts.append(f"HR: {garmin['heart_rate']} bpm")
-            if garmin.get("body_battery"):
-                parts.append(f"Body battery: {garmin['body_battery']}")
-        meals = snapshot.get("meals", {})
-        totals = meals.get("totals", {})
-        if totals.get("protein_g"):
-            parts.append(f"Protein so far: {totals['protein_g']}g")
-        balance = snapshot.get("calorie_balance", {})
-        if balance.get("status"):
-            parts.append(f"Calorie status: {balance['status']} ({balance.get('surplus_deficit', 0)} cal)")
-        if parts:
-            snapshot_summary = "; ".join(parts)
+        checkin_data = _checkin(user_id=user_id)
+        health_context = json.dumps(checkin_data, indent=2, default=str)
     except Exception:
         pass
 
-    protocol_summary = "No active protocols."
+    score_context = ""
     try:
-        protocols = _get_protocols(user_id=user_id)
-        if protocols and isinstance(protocols, list):
-            names = [p.get("protocol", "unknown") for p in protocols if isinstance(p, dict)]
-            if names:
-                protocol_summary = ", ".join(names)
+        score_data = _score(user_id=user_id)
+        score_context = json.dumps(score_data, indent=2, default=str)
     except Exception:
         pass
 
     return (
         f"You are Milo, {name}'s health coach. Today is {today}.\n\n"
-        f"Current health snapshot: {snapshot_summary}\n"
-        f"Active protocols: {protocol_summary}\n\n"
-        "OPENING: When the conversation starts, greet them by name with genuine energy. "
-        "Give a quick, excited status check: where they are in their journey right now "
-        "based on the snapshot data above. One or two standout things. Then naturally "
-        "suggest a couple trailheads they could explore: maybe their sleep, their program, "
-        "logging a workout, checking their score. Don't list options like a phone menu. "
-        "Just weave them in conversationally, like a coach who's been following along.\n\n"
-        "STYLE: direct, warm, energized. Like a trainer who's genuinely stoked about "
-        "the work you're putting in. Never use em dashes. Use periods, commas, or colons instead. "
-        "Keep responses concise for voice. 2-3 sentences max unless asked for detail. "
-        "Reference actual data when available. If data is missing, acknowledge briefly "
-        "and pivot to what you do know."
+        f"Health data:\n{health_context}\n\n"
+        + (f"Coverage score:\n{score_context}\n\n" if score_context else "")
+        + "OPENING: When the conversation starts, greet them by name with genuine energy. "
+        "You know their numbers. Give a quick status check: where they are right now. "
+        "Reference one or two specific things from their data, something that stands out. "
+        "Then suggest a couple directions the conversation could go: their sleep program, "
+        "a recent trend, logging something, checking their score. Don't list options "
+        "like a call center. Weave them in naturally, like a coach who's been paying attention.\n\n"
+        "STYLE: You speak like a trainer who knows the numbers. Direct, warm, data-grounded. "
+        "Never use em dashes. Use periods, commas, or colons instead. "
+        "Keep voice responses to 2-3 sentences unless they ask for detail. "
+        "When you reference data, use the actual numbers. "
+        "If something is missing, acknowledge briefly and work with what you have."
     )
 
 
@@ -403,7 +384,7 @@ async def voice_ws_handler(websocket: WebSocket):
                     "session": {
                         "modalities": ["text", "audio"],
                         "instructions": system_prompt,
-                        "voice": "echo",
+                        "voice": "ash",
                         "input_audio_format": "g711_ulaw",
                         "output_audio_format": "g711_ulaw",
                         "input_audio_transcription": {"model": "whisper-1"},
