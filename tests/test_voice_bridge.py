@@ -20,6 +20,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import WebSocket
 
+class AsyncIterator:
+    """Helper to make an async iterator from a list."""
+    def __init__(self, items):
+        self._items = iter(items)
+    def __aiter__(self):
+        return self
+    async def __anext__(self):
+        try:
+            return next(self._items)
+        except StopIteration:
+            raise StopAsyncIteration
+
+
 from engine.gateway.voice_bridge import (
     OPENAI_TOOLS,
     TranscriptCollector,
@@ -342,7 +355,8 @@ class TestIncomingCallHandler:
         assert resp.status_code == 200
         assert "<Connect>" in resp.text
         assert "<Stream" in resp.text
-        assert "user_id=andrew" in resp.text
+        assert 'name="user_id"' in resp.text
+        assert 'value="andrew"' in resp.text
         assert "auth.mybaseline.health" in resp.text
 
     def test_unknown_caller_gets_rejection(self):
@@ -370,7 +384,10 @@ class TestWebSocketBridge:
         from engine.gateway.voice_bridge import voice_ws_handler
 
         mock_ws = AsyncMock(spec=WebSocket)
-        mock_ws.query_params = {}
+        # Simulate: connected event, then start event with no customParameters
+        start_msg = json.dumps({"event": "start", "start": {"streamSid": "MS123", "customParameters": {}}})
+        connected_msg = json.dumps({"event": "connected"})
+        mock_ws.iter_text = MagicMock(return_value=AsyncIterator([connected_msg, start_msg]))
 
         await voice_ws_handler(mock_ws)
 

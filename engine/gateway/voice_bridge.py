@@ -321,13 +321,15 @@ def create_incoming_call_handler(config):
             )
             return Response(content=twiml, media_type="application/xml")
 
-        ws_url = f"wss://{tunnel_domain}/api/voice/ws?user_id={user_id}"
+        ws_url = f"wss://{tunnel_domain}/api/voice/ws"
 
         twiml = (
             '<?xml version="1.0" encoding="UTF-8"?>'
             "<Response>"
             "<Connect>"
-            f'<Stream url="{ws_url}" />'
+            f'<Stream url="{ws_url}">'
+            f'<Parameter name="user_id" value="{user_id}" />'
+            "</Stream>"
             "</Connect>"
             "</Response>"
         )
@@ -345,30 +347,31 @@ async def voice_ws_handler(websocket: WebSocket):
 
     await websocket.accept()
 
-    # Extract user_id from query params (set by TwiML handler)
-    user_id = websocket.query_params.get("user_id")
-    if not user_id:
-        logger.warning("Voice WebSocket missing user_id, closing")
-        await websocket.close(code=4001)
-        return
-
     transcript = TranscriptCollector()
     stream_sid = None
     openai_ws = None
+    user_id = None
 
     try:
-        # Build context for this user
-        system_prompt = build_session_context(user_id)
-
         # Main event loop: process Twilio events
         async for raw_msg in websocket.iter_text():
             msg = json.loads(raw_msg)
             event = msg.get("event")
 
             if event == "connected":
-                logger.info("Twilio stream connected for user %s", user_id)
+                logger.info("Twilio stream connected")
 
             elif event == "start":
+                # Extract user_id from custom parameters (set via TwiML <Parameter>)
+                custom_params = msg.get("start", {}).get("customParameters", {})
+                user_id = custom_params.get("user_id")
+                if not user_id:
+                    logger.warning("Voice WebSocket missing user_id in start params, closing")
+                    await websocket.close(code=4001)
+                    return
+
+                # Build context now that we know who's calling
+                system_prompt = build_session_context(user_id)
                 stream_sid = msg.get("start", {}).get("streamSid", "")
                 logger.info("Stream started: %s (user=%s)", stream_sid, user_id)
 
