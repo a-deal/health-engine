@@ -540,7 +540,47 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
                 "size_mb": round(size_mb, 1),
             }
 
-        # 6. Disk space
+        # 6. Scheduler health (last successful send)
+        try:
+            from .db import get_db as _get_db2
+            _sdb = _get_db2()
+            last_send = _sdb.execute(
+                "SELECT sent_at FROM scheduled_send WHERE status = 'sent' ORDER BY sent_at DESC LIMIT 1"
+            ).fetchone()
+            if last_send and last_send["sent_at"]:
+                from datetime import datetime as _dt3, timezone as _tz3
+                ts = _dt3.fromisoformat(last_send["sent_at"].replace("Z", "+00:00"))
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=_tz3.utc)
+                age_hours = (_dt3.now(_tz3.utc) - ts).total_seconds() / 3600
+                checks["scheduler"] = {
+                    "status": "ok" if age_hours < 24 else "stale",
+                    "last_send_hours_ago": round(age_hours, 1),
+                }
+            else:
+                checks["scheduler"] = {"status": "no_sends"}
+        except Exception as e:
+            checks["scheduler"] = {"status": "error", "error": str(e)[:100]}
+
+        # 7. Briefing freshness (per active user)
+        briefing_status = {}
+        if users_dir.exists():
+            for user_dir in sorted(users_dir.iterdir()):
+                if not user_dir.is_dir() or user_dir.name in skip_users or user_dir.name.startswith("test_"):
+                    continue
+                uid = user_dir.name
+                bf = user_dir / "briefing.json"
+                if bf.exists():
+                    import time as _time
+                    age_hours = (_time.time() - bf.stat().st_mtime) / 3600
+                    briefing_status[uid] = {
+                        "status": "ok" if age_hours < 48 else "stale",
+                        "age_hours": round(age_hours, 1),
+                    }
+        if briefing_status:
+            checks["briefing_freshness"] = briefing_status
+
+        # 8. Disk space
         import shutil
         usage = shutil.disk_usage(str(Path.home()))
         pct_used = round(100 * (usage.used / usage.total), 1)
