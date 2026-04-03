@@ -135,7 +135,7 @@ async def generate_focus_plan(request: Request):
 
     # Auth — config is injected by create_app() via app.state
     config = request.app.state.config
-    token = body.get("token") or request.headers.get("authorization", "").replace("Bearer ", "")
+    token = body.get("token") or request.headers.get("authorization", "").replace("Bearer ", "") or request.headers.get("x-app-token", "")
     if not config.api_token:
         raise HTTPException(500, "API token not configured")
     if not token or token != config.api_token:

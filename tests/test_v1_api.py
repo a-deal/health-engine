@@ -434,6 +434,10 @@ class TestBearerAuth:
         resp = client.get("/api/v1/persons", headers={"Authorization": f"Bearer {TOKEN}"})
         assert resp.status_code == 200
 
+    def test_x_app_token_works(self, client):
+        resp = client.get("/api/v1/persons", headers={"x-app-token": TOKEN})
+        assert resp.status_code == 200
+
 
 # --- Per-user token isolation ---
 

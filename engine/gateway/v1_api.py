@@ -118,6 +118,8 @@ def _verify_token(request: Request, token: str = Query(None)):
         auth = request.headers.get("authorization", "")
         if auth.startswith("Bearer "):
             effective = auth[7:]
+    if not effective:
+        effective = request.headers.get("x-app-token")
 
     if not effective:
         raise HTTPException(403, "Invalid token")
