@@ -152,6 +152,7 @@ def gather_user_data(user: dict, conn: Optional[sqlite3.Connection], data_dir: P
 
     result = {
         "user_id": uid,
+        "person_id": None,
         "name": user["name"],
         "has_data_dir": udir.is_dir(),
         "habits_yesterday": None,
@@ -223,6 +224,9 @@ def _gather_from_db(
     person_ids = list(set(person_ids))
     if not person_ids:
         return
+
+    # Store primary person_id for issue tracking
+    result["person_id"] = person_ids[0]
 
     placeholders = ",".join("?" for _ in person_ids)
 
@@ -620,7 +624,14 @@ def main():
         data = gather_user_data(user, conn, data_dir)
         users_data.append(data)
 
+    # Sync issues from signals + audit errors
     if conn:
+        try:
+            audit_path = str(data_dir / "admin" / "api_audit.jsonl")
+            from engine.gateway.issues import sync_issues_from_digest
+            sync_issues_from_digest(conn, users_data, audit_path)
+        except Exception as e:
+            print(f"Issue sync failed: {e}", file=sys.stderr)
         conn.close()
 
     # Format

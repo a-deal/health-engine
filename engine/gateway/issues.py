@@ -197,3 +197,31 @@ def check_audit_errors(
             source="audit",
             dedup_key=dedup_key,
         )
+
+
+def sync_issues_from_digest(
+    db: sqlite3.Connection,
+    users_data: list[dict],
+    audit_path: str,
+    error_threshold: int = 3,
+    error_window_hours: int = 24,
+):
+    """One-shot: convert digest signals + audit errors into issues.
+
+    Called at the end of admin_digest main(). Each user dict must have
+    'person_id' and 'signals' keys.
+    """
+    # Build signal list for process_signals
+    signals = []
+    all_person_ids = []
+    for u in users_data:
+        pid = u.get("person_id")
+        if not pid:
+            continue
+        all_person_ids.append(pid)
+        for sig in u.get("signals", []):
+            signals.append({"person_id": pid, "signal": sig})
+
+    process_signals(db, signals, all_person_ids=all_person_ids)
+    check_audit_errors(db, audit_path, threshold=error_threshold,
+                       window_hours=error_window_hours)

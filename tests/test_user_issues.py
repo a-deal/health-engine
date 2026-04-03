@@ -8,7 +8,7 @@ import json
 import os
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -319,3 +319,95 @@ class TestIssuesAPI:
     def test_rejects_bad_token(self, client):
         resp = client.get("/api/v1/issues?token=wrong")
         assert resp.status_code == 403
+
+
+# --- Admin digest integration ---
+
+
+class TestDigestIntegration:
+    """admin_digest main() should create issues from signals and audit errors."""
+
+    def test_digest_creates_issues_from_signals(self, db, tmp_path):
+        """When digest runs and finds signals, issues should be created in DB."""
+        from scripts.admin_digest import _compute_signals
+        from engine.gateway.issues import sync_issues_from_digest, list_issues
+
+        # Simulate a user with "garmin stale" and "quiet 3d" signals
+        user_data = [
+            {
+                "user_id": "grigoriy",
+                "person_id": "g1",
+                "name": "Grigoriy",
+                "signals": [],
+                "has_data_dir": True,
+                "habits_yesterday": None,
+                "habits_total": 0,
+                "streak_days": 0,
+                "day_number": None,
+                "last_activity_date": "2026-03-31",
+                "has_wearable": True,
+                "garmin_age_hours": 30,
+            },
+        ]
+        now = datetime(2026, 4, 3, 9, 0)
+        _compute_signals(user_data[0], now)
+        assert "garmin stale" in user_data[0]["signals"]
+        assert any("quiet" in s for s in user_data[0]["signals"])
+
+        # Now run the issue sync
+        sync_issues_from_digest(db, user_data, str(tmp_path / "empty_audit.jsonl"))
+
+        issues = list_issues(db, person_id="g1", status="open")
+        categories = {i["category"] for i in issues}
+        assert "stale_data" in categories, f"Expected stale_data issue, got {categories}"
+        assert "engagement" in categories, f"Expected engagement issue, got {categories}"
+
+    def test_digest_creates_issues_from_audit_errors(self, db, tmp_path):
+        """Digest should also check audit log for error spikes."""
+        from engine.gateway.issues import sync_issues_from_digest, list_issues
+
+        # Create an audit log with errors
+        audit_path = tmp_path / "api_audit.jsonl"
+        now = datetime.now(timezone.utc)
+        lines = []
+        for i in range(5):
+            ts = (now - timedelta(hours=i)).isoformat()
+            lines.append(json.dumps({
+                "ts": ts, "tool": "pull_garmin", "user_id": "andrew",
+                "status": "error", "error": "429 rate limit",
+            }))
+        audit_path.write_text("\n".join(lines) + "\n")
+
+        user_data = [{"user_id": "andrew", "person_id": "a1", "signals": []}]
+        sync_issues_from_digest(db, user_data, str(audit_path))
+
+        issues = list_issues(db, person_id="a1", status="open")
+        assert any(i["category"] == "error_spike" for i in issues)
+
+    def test_digest_auto_resolves_cleared_signals(self, db, tmp_path):
+        """When a signal clears on the next digest run, its issue should auto-resolve."""
+        from engine.gateway.issues import create_issue, sync_issues_from_digest, list_issues
+
+        # Create a stale_data issue from previous run
+        create_issue(db, "g1", "stale_data", "Garmin stale",
+                     source="signal", dedup_key="signal:garmin stale:g1")
+
+        # Now Grigoriy's garmin is fresh (no stale signal)
+        user_data = [{"user_id": "grigoriy", "person_id": "g1", "signals": []}]
+        sync_issues_from_digest(db, user_data, str(tmp_path / "empty.jsonl"))
+
+        open_issues = list_issues(db, person_id="g1", status="open")
+        assert len(open_issues) == 0, "Stale issue should have been auto-resolved"
+
+    def test_person_id_populated_in_gather(self, db):
+        """gather_user_data should set person_id in the result dict."""
+        from scripts.admin_digest import gather_user_data
+
+        user = {"user_id": "grigoriy", "name": "Grigoriy"}
+        data_dir = Path("/tmp/fake-data")
+        data_dir.mkdir(parents=True, exist_ok=True)
+        user_dir = data_dir / "users" / "grigoriy"
+        user_dir.mkdir(parents=True, exist_ok=True)
+
+        result = gather_user_data(user, db, data_dir)
+        assert result.get("person_id") == "g1", f"Expected person_id='g1', got {result.get('person_id')}"
