@@ -31,8 +31,10 @@ graceful_timeout = 10
 # 120s to accommodate LLM API calls (focus plan endpoint)
 timeout = 120
 
-# Preload app in master process (shared memory, faster worker spawn)
-preload_app = True
+# Preload disabled: Python 3.14 + native extensions (numpy, cryptography,
+# logfire) SIGSEGV when forked workers inherit master's native state.
+# Each worker loads the app independently after fork instead.
+preload_app = False
 
 # Logging — structured JSON to stdout (see engine/gateway/log_config.py)
 accesslog = "-"
