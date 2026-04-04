@@ -75,10 +75,16 @@ def main():
         sys.exit(1)
 
     token_dir = str(ts.garmin_token_dir(args.user))
-    client = GarminClient(token_dir=token_dir, token_store=ts, user_id=args.user)
-    client.connect()
-    series = client.pull_daily_series(days=args.days, person_id=person_id)
+    data_dir = Path.home() / "src" / "health-engine" / "data" / "users" / args.user
+    client = GarminClient(
+        token_dir=token_dir, token_store=ts, user_id=args.user,
+        data_dir=str(data_dir),
+    )
+    result = client.pull_all(
+        history=True, history_days=args.days, person_id=person_id,
+    )
     ts.sync_garmin_tokens(args.user)
+    series = result.get("daily_series", [])
 
     print(f"\nPulled {len(series)} days. Verifying fix...")
 
