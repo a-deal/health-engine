@@ -185,6 +185,77 @@ class TestEdgeCases:
         assert result.ok
 
 
+class TestFalsePositiveFixes:
+    """Fix false positives identified from 7-day production audit (April 4, 2026).
+
+    Three categories causing 32/51 false flags (63%):
+    1. Python literals (True/False/None) in natural language
+    2. user_id appearing in auth URLs (query params)
+    3. openclaw in troubleshooting context
+    """
+
+    # --- Python literals in natural language ---
+
+    def test_natural_true_not_flagged(self):
+        msg = "That's true. Higher carb days literally pump more water into muscle tissue."
+        result = validate_outbound(msg)
+        assert result.ok, f"False positive: natural 'true' flagged: {result.details}"
+
+    def test_natural_false_not_flagged(self):
+        msg = "That's false. You don't need to fast before a lipid panel anymore."
+        result = validate_outbound(msg)
+        assert result.ok, f"False positive: natural 'false' flagged: {result.details}"
+
+    def test_natural_none_not_flagged(self):
+        msg = "None of your metrics are in the red zone this week."
+        result = validate_outbound(msg)
+        assert result.ok, f"False positive: natural 'none' flagged: {result.details}"
+
+    def test_python_none_in_code_context_still_flagged(self):
+        """'returned None' or 'is None' is still a code leak."""
+        msg = "Your sleep data returned None and the refresh failed."
+        result = validate_outbound(msg)
+        assert not result.ok
+
+    def test_python_true_in_code_context_still_flagged(self):
+        """'returned True' or '= True' is still a code leak."""
+        msg = "The token refresh returned True but the data is empty."
+        result = validate_outbound(msg)
+        assert not result.ok
+
+    # --- user_id in auth URLs ---
+
+    def test_auth_url_with_user_id_not_flagged(self):
+        msg = (
+            "Tap this link to install the sync shortcut:\n"
+            "https://auth.mybaseline.health/api/shortcut?token=abc123&user_id=paul"
+        )
+        result = validate_outbound(msg)
+        assert result.ok, f"False positive: user_id in auth URL flagged: {result.details}"
+
+    def test_user_id_outside_url_still_flagged(self):
+        """Bare user_id references are still system internals."""
+        msg = "I need to add user_id to the calendar call. Let me retry."
+        result = validate_outbound(msg)
+        assert not result.ok
+
+    # --- openclaw in troubleshooting context ---
+
+    def test_whatsapp_down_openclaw_mention_not_flagged(self):
+        msg = (
+            "WhatsApp is down. Your morning brief couldn't be delivered. "
+            "The OpenClaw WhatsApp listener needs to be reconnected."
+        )
+        result = validate_outbound(msg)
+        assert result.ok, f"False positive: openclaw in user troubleshooting: {result.details}"
+
+    def test_openclaw_in_system_diagnostic_still_flagged(self):
+        """OpenClaw in a diagnostic dump context is still a leak."""
+        msg = "The openclaw gateway status shows 3 sessions. Cron re-triggered auto-remediation."
+        result = validate_outbound(msg)
+        assert not result.ok
+
+
 class TestIngestIntegration:
     """Verify the gate is wired into _ingest_message."""
 

@@ -82,10 +82,13 @@ _INTERNAL_TERMS = [
     ("/api/ingest_message", False),
     # Services and infrastructure
     ("gunicorn", True),
-    ("openclaw", True),
     ("launchd", True),
     ("uvicorn", True),
     ("cloudflare tunnel", True),
+    # openclaw: removed from hard block. Users may see "OpenClaw" in
+    # troubleshooting context (e.g. "WhatsApp listener needs reconnecting").
+    # Diagnostic leaks are caught by co-occurring terms (cron, remediation,
+    # gateway status, etc.).
     # Python identifiers
     ("_get_db", False),
     ("_get_daily_snapshot", False),
@@ -93,10 +96,9 @@ _INTERNAL_TERMS = [
     ("_compose_message", False),
     ("_send_via_openclaw", False),
     ("init_db", False),
-    # Python literals in non-code context
-    (" None", False),
-    (" True", False),
-    (" False", False),
+    # Python literals: only flag in code context (returned/is/= prefix).
+    # Case-sensitive: Python "True"/"False"/"None" are capitalized.
+    # "that's true" (lowercase) is natural language, not a code leak.
     # System diagnostic keywords
     ("auto-remediation", True),
     ("remediation", True),
@@ -112,10 +114,18 @@ for term, word_boundary in _INTERNAL_TERMS:
     else:
         _INTERNAL_PATTERNS.append(re.compile(re.escape(term), re.IGNORECASE))
 
-# Allowed terms that look internal but are user-facing
+# Python literals: case-SENSITIVE. "returned None" is code, "none of" is English.
+_PYTHON_LITERAL_PATTERNS = [
+    re.compile(r'(?:returned|is|=)\s*None'),
+    re.compile(r'(?:returned|is|=)\s*True'),
+    re.compile(r'(?:returned|is|=)\s*False'),
+]
+
+# Allowed terms that look internal but are user-facing.
+# Strip full URLs (including query params like user_id=X, token=X).
 _ALLOWLIST = re.compile(
-    r'https?://dashboard\.mybaseline\.health'
-    r'|https?://auth\.mybaseline\.health',
+    r'https?://dashboard\.mybaseline\.health\S*'
+    r'|https?://auth\.mybaseline\.health\S*',
 )
 
 
@@ -157,6 +167,16 @@ def validate_outbound(message: str) -> ValidationResult:
             result.flags.append("internal_vocabulary")
             result.details.append(f"internal_vocabulary:{match.group()}")
             break  # One internal vocab flag is enough
+
+    # Category 2b: Python literals (case-sensitive, checked separately)
+    if result.ok:  # Only if not already flagged
+        for pattern in _PYTHON_LITERAL_PATTERNS:
+            if pattern.search(cleaned):
+                match = pattern.search(cleaned)
+                result.ok = False
+                result.flags.append("internal_vocabulary")
+                result.details.append(f"internal_vocabulary:{match.group()}")
+                break
 
     # Deduplicate flags
     result.flags = list(dict.fromkeys(result.flags))
