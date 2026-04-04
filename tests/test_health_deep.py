@@ -82,3 +82,74 @@ class TestHealthDeepCovers:
         data = resp.json()
         sched = data["checks"]["scheduler"]
         assert sched["status"] == "no_sends"
+
+
+class TestHealthDeepSourceChanges:
+    """health/deep should detect wearable source changes per user."""
+
+    def test_reports_source_change(self, db_path, health_client):
+        """When a user's wearable source changed recently, health/deep should flag it."""
+        import uuid
+        db = get_db(db_path)
+        now_str = datetime.now(timezone.utc).isoformat()
+
+        # Insert a person
+        db.execute(
+            "INSERT INTO person (id, name, health_engine_user_id, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("p1", "Andrew", "andrew", now_str, now_str),
+        )
+        # Insert wearable data with source change
+        for i, (date, source, vo2) in enumerate([
+            ("2026-03-28", "garmin", 47.0),
+            ("2026-03-29", "garmin", 47.0),
+            ("2026-04-01", "apple_health", 32.3),
+        ]):
+            rid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"p1:wearable_daily:{date}:{source}"))
+            db.execute(
+                "INSERT INTO wearable_daily (id, person_id, date, source, vo2_max, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (rid, "p1", date, source, vo2, now_str, now_str),
+            )
+        db.commit()
+
+        resp = health_client.get("/health/deep")
+        data = resp.json()
+        assert "wearable_source_changes" in data["checks"], \
+            f"Missing wearable_source_changes check. Keys: {list(data['checks'].keys())}"
+        sc = data["checks"]["wearable_source_changes"]
+        assert "andrew" in sc
+        assert sc["andrew"]["status"] == "changed"
+        assert "vo2_max" in sc["andrew"]["changes"]
+
+    def test_no_source_change_reports_ok(self, db_path, health_client):
+        """When all data comes from one source, status should be ok."""
+        import uuid
+        db = get_db(db_path)
+        now_str = datetime.now(timezone.utc).isoformat()
+
+        db.execute(
+            "INSERT INTO person (id, name, health_engine_user_id, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("p1", "Andrew", "andrew", now_str, now_str),
+        )
+        for date in ["2026-04-01", "2026-04-02", "2026-04-03"]:
+            rid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"p1:wearable_daily:{date}:garmin"))
+            db.execute(
+                "INSERT INTO wearable_daily (id, person_id, date, source, vo2_max, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (rid, "p1", date, "garmin", 47.0, now_str, now_str),
+            )
+        db.commit()
+
+        resp = health_client.get("/health/deep")
+        data = resp.json()
+        sc = data["checks"].get("wearable_source_changes", {})
+        # Either not present (no changes) or ok
+        if "andrew" in sc:
+            assert sc["andrew"]["status"] == "ok"
+
+    def test_no_users_no_crash(self, health_client):
+        """health/deep should not crash when there are no users with wearable data."""
+        resp = health_client.get("/health/deep")
+        assert resp.status_code == 200

@@ -589,7 +589,32 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
         if briefing_status:
             checks["briefing_freshness"] = briefing_status
 
-        # 8. Disk space
+        # 8. Wearable source changes (detect metric source switches in last 7 days)
+        try:
+            from .scheduler import detect_source_changes
+            from .db import get_db as _get_db3
+            _scdb = _get_db3()
+            # Get all active persons with health_engine_user_id
+            _sc_persons = _scdb.execute(
+                "SELECT id, health_engine_user_id FROM person "
+                "WHERE deleted_at IS NULL AND health_engine_user_id IS NOT NULL"
+            ).fetchall()
+            source_change_report = {}
+            for p in _sc_persons:
+                changes = detect_source_changes(_scdb, p["id"], days=7)
+                if changes:
+                    source_change_report[p["health_engine_user_id"]] = {
+                        "status": "changed",
+                        "changes": {k: v for k, v in changes.items()},
+                    }
+                else:
+                    source_change_report[p["health_engine_user_id"]] = {"status": "ok"}
+            if source_change_report:
+                checks["wearable_source_changes"] = source_change_report
+        except Exception as e:
+            checks["wearable_source_changes"] = {"status": "error", "error": str(e)[:100]}
+
+        # 9. Disk space
         import shutil
         usage = shutil.disk_usage(str(Path.home()))
         pct_used = round(100 * (usage.used / usage.total), 1)

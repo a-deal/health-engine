@@ -117,6 +117,83 @@ def _record_send(
     db.commit()
 
 
+# --- Pre-send validation ---
+
+# Metrics we track for source changes, mapped to regex patterns that detect
+# them being mentioned in a coaching message.
+_METRIC_PATTERNS = {
+    "vo2_max": r"(?i)\bvo2\b",
+    "rhr": r"(?i)\b(?:resting\s+heart\s+rate|rhr)\b",
+    "hrv": r"(?i)\bhrv\b",
+    "sleep_hrs": r"(?i)\bsleep\b",
+}
+
+
+def detect_source_changes(db, person_id: str, days: int = 7) -> dict:
+    """Find metrics whose wearable source changed within the last N days.
+
+    Returns a dict like:
+        {"vo2_max": {"old_source": "garmin", "new_source": "apple_health"}}
+    Empty dict means no source changes detected.
+    """
+    from datetime import datetime, timedelta
+
+    cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    metrics = ["vo2_max", "rhr", "hrv", "sleep_hrs"]
+
+    changes = {}
+    for metric in metrics:
+        # Get all distinct (source, date) pairs for this metric within the window
+        # where the metric is not null, ordered by date
+        rows = db.execute(
+            f"SELECT source, date FROM wearable_daily "
+            f"WHERE person_id = ? AND date >= ? AND {metric} IS NOT NULL "
+            f"ORDER BY date ASC",
+            (person_id, cutoff),
+        ).fetchall()
+
+        if len(rows) < 2:
+            continue
+
+        # Check if source changed: compare first non-null source to last
+        sources_seen = []
+        for row in rows:
+            src = row["source"]
+            if not sources_seen or sources_seen[-1] != src:
+                sources_seen.append(src)
+
+        if len(sources_seen) >= 2:
+            changes[metric] = {
+                "old_source": sources_seen[-2],
+                "new_source": sources_seen[-1],
+            }
+
+    return changes
+
+
+def validate_coaching_claims(message: str, person_id: str, db) -> list[str]:
+    """Check if a coaching message references metrics with recent source changes.
+
+    Returns a list of warning strings. Empty list = message is safe to send.
+    """
+    import re
+
+    source_changes = detect_source_changes(db, person_id)
+    if not source_changes:
+        return []
+
+    warnings = []
+    for metric, change in source_changes.items():
+        pattern = _METRIC_PATTERNS.get(metric)
+        if pattern and re.search(pattern, message):
+            warnings.append(
+                f"{metric} source changed from {change['old_source']} to {change['new_source']} "
+                f"in the last 7 days. Metric reference in message may be misleading."
+            )
+
+    return warnings
+
+
 # --- Message composition via Sonnet ---
 
 
@@ -326,6 +403,21 @@ def _run_schedule(schedule_type: str, target_hour: int, require_friday: bool = F
             logger.error("Failed to compose message for %s: %s", user_id, e)
             results.append({"user_id": user_id, "status": "error", "reason": f"compose failed: {e}"})
             continue
+
+        # Pre-send validation: flag metrics whose source changed recently
+        try:
+            claim_warnings = validate_coaching_claims(message, person_id, db)
+            if claim_warnings:
+                logger.warning("Source change warnings for %s: %s", user_id, claim_warnings)
+                disclaimer = (
+                    "\n\n[Note: some metrics may reflect a wearable source change, "
+                    "not an actual change in your health. "
+                    + " ".join(w.split(" source changed")[0] + " source changed." for w in claim_warnings)
+                    + "]"
+                )
+                message = message + disclaimer
+        except Exception as e:
+            logger.warning("Pre-send validation failed for %s: %s", user_id, e)
 
         # Extract and record behavior change hypothesis (best-effort)
         try:
