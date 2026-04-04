@@ -6,9 +6,12 @@ register_tools(mcp).
 """
 
 import json
+import logging
 import os
 import sys
 import webbrowser
+
+logger = logging.getLogger("health-engine.tools")
 from datetime import datetime
 from pathlib import Path
 
@@ -3444,6 +3447,17 @@ def _ingest_message(
     if existing:
         return {"status": "duplicate_skipped", "user_id": user_id}
 
+    # Outbound gate: validate assistant messages for system internal leaks
+    gate_result = None
+    if role == "assistant" and content:
+        from engine.gateway.outbound_gate import validate_outbound
+        gate_result = validate_outbound(content)
+        if not gate_result.ok:
+            logger.warning(
+                "Outbound gate flagged message for user %s: %s | preview: %s",
+                user_id, gate_result.details, content[:200],
+            )
+
     conn.execute(
         """INSERT INTO conversation_message
            (user_id, role, content, sender_id, sender_name, channel,
@@ -3454,7 +3468,11 @@ def _ingest_message(
     )
     conn.commit()
 
-    return {"status": "ok", "user_id": user_id, "role": role, "timestamp": ts}
+    result = {"status": "ok", "user_id": user_id, "role": role, "timestamp": ts}
+    if gate_result and not gate_result.ok:
+        result["gate_flags"] = gate_result.flags
+        result["gate_details"] = gate_result.details
+    return result
 
 
 def _get_conversations(
