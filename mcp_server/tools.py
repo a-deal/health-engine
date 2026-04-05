@@ -1532,15 +1532,26 @@ def _onboard(user_id: str | None = None) -> dict:
     }
 
 
-def _auth_garmin(user_id: str | None = None) -> dict:
-    from mcp_server.garmin_auth import run_auth_flow
-
+def _auth_garmin(user_id: str | None = None, email: str | None = None, password: str | None = None) -> dict:
     # Per-user token directory: tokens/garmin/{user_id}
     if user_id and user_id != "default":
         token_dir = str(Path(os.path.expanduser("~/.config/health-engine/tokens/garmin")) / user_id)
     else:
         token_dir = os.path.expanduser("~/.config/health-engine/garmin-tokens")
     Path(token_dir).mkdir(parents=True, exist_ok=True)
+
+    # Headless auth: credentials provided directly (for remote users on Telegram)
+    if email and password:
+        from mcp_server.garmin_auth import _do_garmin_auth
+        result = _do_garmin_auth(email, password, token_dir)
+        if result.get("authenticated"):
+            uid = user_id if user_id and user_id != "default" else "default"
+            ts = _get_token_store()
+            ts.sync_garmin_tokens(uid)
+        return result
+
+    # Browser auth: opens local page (for users with Mac Mini access)
+    from mcp_server.garmin_auth import run_auth_flow
     return run_auth_flow(token_dir=token_dir)
 
 
@@ -3834,9 +3845,9 @@ def register_tools(mcp: FastMCP):
         return _onboard(_effective_user_id(user_id))
 
     @mcp.tool()
-    def auth_garmin(user_id: str | None = None) -> dict:
-        """Authenticate with Garmin Connect via a secure browser form. Opens your browser — you type credentials there, never in chat. Credentials are used once to obtain tokens and are NOT stored."""
-        return _auth_garmin(_effective_user_id(user_id))
+    def auth_garmin(user_id: str | None = None, email: str | None = None, password: str | None = None) -> dict:
+        """Authenticate with Garmin Connect. Two modes: (1) If email and password are provided, authenticates directly (for remote users on Telegram). Credentials are used once to obtain tokens and are NOT stored. (2) If no credentials, opens a secure browser form on localhost."""
+        return _auth_garmin(_effective_user_id(user_id), email=email, password=password)
 
     @mcp.tool()
     def pull_garmin(history: bool = False, workouts: bool = False, user_id: str | None = None) -> dict:

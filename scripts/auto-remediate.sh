@@ -24,7 +24,7 @@ log() { echo "[$(date +%H:%M:%S)] $1"; }
 
 # ── 1. Re-trigger errored crons ──
 log "Checking for errored crons..."
-ERRORED_CRONS=$(openclaw cron list 2>&1 | grep "error" | awk '{print $1, $2}')
+ERRORED_CRONS=$(openclaw cron list 2>&1 | grep "error" | awk '{print $1, $2}' || true)
 
 if [[ -n "$ERRORED_CRONS" ]]; then
     while IFS=' ' read -r cron_id cron_name; do
