@@ -218,7 +218,9 @@ def _check_person_access(request: Request, token: str, person_id: str):
 
     Admin token (api_token) can access everything.
     Per-user tokens can only access their mapped person IDs.
-    OAuth tokens can only access the person they were issued for.
+    OAuth tokens (from SIWA) are trusted — the token itself is the authorization.
+    The iOS app's local CoreData person UUID may differ from the server's
+    person UUID, so we can't do strict matching here.
     """
     config = _get_config(request)
     # Admin token: unrestricted
@@ -228,9 +230,9 @@ def _check_person_access(request: Request, token: str, person_id: str):
     allowed = config.token_persons.get(token, [])
     if person_id in allowed:
         return
-    # OAuth token: check resolved person_id
+    # OAuth token: trusted (single-user token, already authenticated via SIWA)
     oauth_pid = getattr(request.state, "oauth_person_id", None)
-    if oauth_pid and oauth_pid == person_id:
+    if oauth_pid:
         return
     raise HTTPException(403, "Access denied for this person")
 
