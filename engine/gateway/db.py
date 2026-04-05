@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS person (
     channel_target TEXT,
     wearables_json TEXT DEFAULT '[]',
     unit_system TEXT NOT NULL DEFAULT 'imperial',  -- 'imperial' or 'metric'
+    apple_user_identifier TEXT,  -- Sign in with Apple 'sub' claim
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     deleted_at TEXT
@@ -549,12 +550,19 @@ def _migrate(conn: sqlite3.Connection):
         "timezone": "ALTER TABLE person ADD COLUMN timezone TEXT DEFAULT 'America/Los_Angeles'",
         "role": "ALTER TABLE person ADD COLUMN role TEXT DEFAULT 'user'",
         "unit_system": "ALTER TABLE person ADD COLUMN unit_system TEXT NOT NULL DEFAULT 'imperial'",
+        "apple_user_identifier": "ALTER TABLE person ADD COLUMN apple_user_identifier TEXT",
     }
     dirty = False
     for col, sql in migrations.items():
         if col not in cols:
             conn.execute(sql)
             dirty = True
+
+    # Unique index on apple_user_identifier (idempotent)
+    existing_indexes = {row[1] for row in conn.execute("PRAGMA index_list(person)").fetchall()}
+    if "idx_person_apple_user" not in existing_indexes and "apple_user_identifier" in cols | set(migrations.keys()):
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_person_apple_user ON person(apple_user_identifier)")
+        dirty = True
 
     # training_session: add program linkage columns
     ts_cols = {row[1] for row in conn.execute("PRAGMA table_info(training_session)").fetchall()}
@@ -795,6 +803,7 @@ TABLE_COLUMNS = {
         "conditions_json", "medications", "family_history_json",
         "health_notes", "health_engine_user_id", "phone", "email",
         "timezone", "role", "channel", "channel_target", "wearables_json",
+        "apple_user_identifier",
     ],
     "wearable_token": [
         "person_id", "user_id", "service", "token_name", "token_data",

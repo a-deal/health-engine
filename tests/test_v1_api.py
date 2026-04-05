@@ -2,11 +2,16 @@
 
 import json
 import os
+import secrets
 import sqlite3
 import tempfile
+import time
 from pathlib import Path
 
+import jwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
 from fastapi.testclient import TestClient
 
 from engine.gateway.config import GatewayConfig
@@ -537,24 +542,31 @@ class TestPerUserTokens:
 # --- Generate Focus Plan (LLM endpoint) ---
 
 class TestGenerateFocusPlan:
-    def test_auth_required(self, client):
-        """Generate endpoint rejects requests without valid token."""
-        resp = client.post("/api/v1/generate-focus-plan", json={"context": "test"})
-        assert resp.status_code == 403
 
-    def test_auth_accepts_valid_token(self, client, monkeypatch):
-        """Generate endpoint accepts valid token and reaches the LLM call.
+    _FAKE_LLM_RESPONSE = json.dumps({
+        "healthSnapshot": "ok",
+        "reflection": "looking good",
+        "insight": "sleep more",
+        "encouragement": "keep going",
+        "primaryRecommendation": {
+            "catalogueId": "sleep-consistent-bedtime",
+            "action": "go to bed by 10pm",
+            "anchor": "after dinner",
+            "reasoning": "sleep drives recovery",
+            "category": "sleep",
+            "purpose": "improve recovery",
+            "evidence": [],
+        },
+        "alternatives": [],
+    })
 
-        We mock the Anthropic client so no real API call is made.
-        The important thing is that auth passes (no ImportError, no 403).
-        """
+    def _mock_anthropic(self, monkeypatch):
         import engine.gateway.focus_plan_api as fp_mod
-
         mock_called = {}
 
         class FakeMessage:
             def __init__(self):
-                self.content = [type("Block", (), {"text": '{"healthSnapshot":"ok","primaryRecommendation":{"catalogueId":"sleep-consistent-bedtime","action":"go to bed","evidence":[]},"alternatives":[]}'})()]
+                self.content = [type("Block", (), {"text": TestGenerateFocusPlan._FAKE_LLM_RESPONSE})()]
 
         class FakeMessages:
             def create(self, **kwargs):
@@ -566,6 +578,16 @@ class TestGenerateFocusPlan:
                 self.messages = FakeMessages()
 
         monkeypatch.setattr(fp_mod.anthropic, "Anthropic", FakeAnthropic)
+        return mock_called
+
+    def test_auth_required(self, client):
+        """Generate endpoint rejects requests without valid token."""
+        resp = client.post("/api/v1/generate-focus-plan", json={"context": "test"})
+        assert resp.status_code == 403
+
+    def test_auth_accepts_valid_token(self, client, monkeypatch):
+        """Generate endpoint accepts valid token and reaches the LLM call."""
+        mock_called = self._mock_anthropic(monkeypatch)
 
         resp = client.post(
             "/api/v1/generate-focus-plan",
@@ -576,6 +598,78 @@ class TestGenerateFocusPlan:
         assert "healthSnapshot" in body
         assert "generated_at" in body
         assert mock_called.get("model") is not None
+
+    def test_per_user_token_accepted(self, multi_user_client, monkeypatch):
+        """Per-user tokens (like Paul's) must be accepted by generate-focus-plan."""
+        self._mock_anthropic(monkeypatch)
+
+        # Seed person so FK constraint is satisfied
+        multi_user_client.post(
+            "/api/v1/persons",
+            params={"token": TOKEN},
+            json={"id": "paul-001", "name": "Paul"},
+        )
+
+        resp = multi_user_client.post(
+            "/api/v1/generate-focus-plan",
+            json={"token": PAUL_TOKEN, "person_id": "paul-001", "context": "Paul's health context"},
+        )
+        assert resp.status_code == 200, f"Per-user token should be accepted, got {resp.status_code}"
+
+    def test_generated_plan_persisted_to_db(self, multi_user_client, monkeypatch, db_path):
+        """Generated focus plan must be saved to the focus_plan table.
+
+        Bug: generate-focus-plan returned the plan but never wrote it to SQLite.
+        This meant latestFocusPlan in the context endpoint was always null.
+        """
+        self._mock_anthropic(monkeypatch)
+
+        # Seed person
+        multi_user_client.post(
+            "/api/v1/persons",
+            params={"token": TOKEN},
+            json={"id": "paul-001", "name": "Paul"},
+        )
+
+        # Generate a focus plan
+        resp = multi_user_client.post(
+            "/api/v1/generate-focus-plan",
+            json={"token": PAUL_TOKEN, "person_id": "paul-001", "context": "Paul's health context"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        plan_id = body.get("id")
+        assert plan_id, "Response must include the persisted plan's id"
+
+        # Verify it's in the DB
+        db = get_db(db_path)
+        row = db.execute("SELECT * FROM focus_plan WHERE person_id = ?", ("paul-001",)).fetchone()
+        assert row is not None, "Focus plan must be persisted to SQLite"
+        assert dict(row)["health_snapshot"] == "ok"
+
+    def test_generated_plan_appears_in_context(self, multi_user_client, monkeypatch):
+        """After generating a plan, the context endpoint must return it as latestFocusPlan."""
+        self._mock_anthropic(monkeypatch)
+
+        # Seed person
+        multi_user_client.post(
+            "/api/v1/persons",
+            params={"token": TOKEN},
+            json={"id": "paul-001", "name": "Paul"},
+        )
+
+        # Generate
+        multi_user_client.post(
+            "/api/v1/generate-focus-plan",
+            json={"token": PAUL_TOKEN, "person_id": "paul-001", "context": "Paul's health context"},
+        )
+
+        # Check context
+        resp = multi_user_client.get("/api/v1/persons/paul-001/context", params={"token": TOKEN})
+        assert resp.status_code == 200
+        ctx = resp.json()
+        assert ctx["latestFocusPlan"] is not None, "latestFocusPlan must not be null after generation"
+        assert ctx["latestFocusPlan"]["primaryAction"] == "go to bed by 10pm"
 
     def test_catalogue_endpoint_no_auth(self, client):
         """Habit catalogue is a public read-only endpoint."""
@@ -620,3 +714,191 @@ class TestAuditLogging:
         assert entry["method"] == "POST"
         assert entry["person_id"] == "p1"
         assert entry["status"] == 200
+
+
+# --- Sign in with Apple auth ---
+
+# Generate a test RSA key pair for signing fake Apple JWTs
+_TEST_RSA_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+_TEST_RSA_PUB = _TEST_RSA_KEY.public_key()
+
+
+def _make_apple_jwt(sub="apple-user-001", aud="co.enchant.Hematica", exp_offset=3600, kid="test-key-1"):
+    """Create a JWT mimicking Apple's identityToken."""
+    now = int(time.time())
+    payload = {
+        "iss": "https://appleid.apple.com",
+        "aud": aud,
+        "exp": now + exp_offset,
+        "iat": now,
+        "sub": sub,
+        "email": "test@example.com",
+        "email_verified": True,
+    }
+    return jwt.encode(payload, _TEST_RSA_KEY, algorithm="RS256", headers={"kid": kid})
+
+
+def _jwks_response():
+    """Build a JWKS response containing our test public key."""
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+    pub_numbers = _TEST_RSA_PUB.public_numbers()
+
+    import base64
+
+    def _b64url(num, length):
+        return base64.urlsafe_b64encode(num.to_bytes(length, "big")).rstrip(b"=").decode()
+
+    n = _b64url(pub_numbers.n, 256)  # 2048-bit key = 256 bytes
+    e = _b64url(pub_numbers.e, 3)
+
+    return {
+        "keys": [{
+            "kty": "RSA",
+            "kid": "test-key-1",
+            "use": "sig",
+            "alg": "RS256",
+            "n": n,
+            "e": e,
+        }]
+    }
+
+
+class TestAppleAuth:
+    """Sign in with Apple authentication bridge."""
+
+    def _mock_apple_jwks(self, monkeypatch):
+        """Mock the fetch of Apple's JWKS public keys."""
+        import engine.gateway.v1_api as v1_mod
+        monkeypatch.setattr(v1_mod, "_fetch_apple_jwks", lambda: _jwks_response())
+
+    def test_apple_auth_valid_token(self, client, monkeypatch, db_path):
+        """Valid Apple identity token creates a person and returns access token."""
+        self._mock_apple_jwks(monkeypatch)
+
+        token = _make_apple_jwt(sub="apple-user-paul")
+        resp = client.post("/api/v1/auth/apple", json={"identity_token": token})
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+
+        body = resp.json()
+        assert "access_token" in body
+        assert "refresh_token" in body
+        assert body["token_type"] == "bearer"
+        assert body["expires_in"] > 0
+        assert body["person_id"]
+
+        # Verify person created in DB with apple_user_identifier
+        db = get_db(db_path)
+        row = db.execute(
+            "SELECT apple_user_identifier FROM person WHERE id = ?",
+            (body["person_id"],),
+        ).fetchone()
+        assert row is not None
+        assert row["apple_user_identifier"] == "apple-user-paul"
+
+    def test_apple_auth_reuse_existing_person(self, client, monkeypatch, db_path):
+        """Second auth with same Apple ID reuses the existing person."""
+        self._mock_apple_jwks(monkeypatch)
+
+        token = _make_apple_jwt(sub="apple-user-returning")
+        resp1 = client.post("/api/v1/auth/apple", json={"identity_token": token})
+        assert resp1.status_code == 200
+        person_id_1 = resp1.json()["person_id"]
+
+        resp2 = client.post("/api/v1/auth/apple", json={"identity_token": token})
+        assert resp2.status_code == 200
+        person_id_2 = resp2.json()["person_id"]
+
+        assert person_id_1 == person_id_2, "Should reuse existing person, not create a new one"
+
+    def test_apple_auth_invalid_token_rejected(self, client, monkeypatch):
+        """Malformed or invalid JWT is rejected."""
+        self._mock_apple_jwks(monkeypatch)
+
+        resp = client.post("/api/v1/auth/apple", json={"identity_token": "garbage.not.jwt"})
+        assert resp.status_code == 401
+
+    def test_apple_auth_expired_token_rejected(self, client, monkeypatch):
+        """Expired JWT is rejected."""
+        self._mock_apple_jwks(monkeypatch)
+
+        token = _make_apple_jwt(sub="apple-expired", exp_offset=-3600)
+        resp = client.post("/api/v1/auth/apple", json={"identity_token": token})
+        assert resp.status_code == 401
+
+    def test_apple_auth_link_existing_person(self, client, monkeypatch, db_path):
+        """Can link an Apple ID to an existing person by providing person_id."""
+        self._mock_apple_jwks(monkeypatch)
+
+        # Create person without apple_user_identifier
+        pid = client.post(
+            "/api/v1/persons", params=_auth(),
+            json={"id": "paul-001", "name": "Paul"},
+        ).json()["id"]
+
+        token = _make_apple_jwt(sub="apple-user-paul-link")
+        resp = client.post("/api/v1/auth/apple", json={
+            "identity_token": token,
+            "person_id": "paul-001",
+        })
+        assert resp.status_code == 200
+        assert resp.json()["person_id"] == "paul-001"
+
+        # Verify link was saved
+        db = get_db(db_path)
+        row = db.execute(
+            "SELECT apple_user_identifier FROM person WHERE id = ?",
+            ("paul-001",),
+        ).fetchone()
+        assert row["apple_user_identifier"] == "apple-user-paul-link"
+
+    def test_oauth_token_accepted_by_sync(self, client, monkeypatch, db_path):
+        """OAuth access token from Apple auth works for sync endpoint."""
+        self._mock_apple_jwks(monkeypatch)
+
+        token = _make_apple_jwt(sub="apple-sync-user")
+        auth_resp = client.post("/api/v1/auth/apple", json={"identity_token": token})
+        assert auth_resp.status_code == 200
+        access_token = auth_resp.json()["access_token"]
+        person_id = auth_resp.json()["person_id"]
+
+        # Use the OAuth token for sync
+        sync_resp = client.post(
+            "/api/v1/sync/ios",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json={
+                "person_id": person_id,
+                "last_sync": None,
+                "changes": {"persons": [], "habits": [], "check_ins": [], "focus_plans": [], "messages": []},
+            },
+        )
+        assert sync_resp.status_code == 200, f"Sync with OAuth token failed: {sync_resp.text}"
+
+    def test_oauth_token_refresh(self, client, monkeypatch):
+        """Refresh token issues new access token and revokes old one."""
+        self._mock_apple_jwks(monkeypatch)
+
+        token = _make_apple_jwt(sub="apple-refresh-user")
+        auth_resp = client.post("/api/v1/auth/apple", json={"identity_token": token})
+        assert auth_resp.status_code == 200
+        old_access = auth_resp.json()["access_token"]
+        refresh = auth_resp.json()["refresh_token"]
+
+        # Refresh
+        refresh_resp = client.post("/api/v1/auth/refresh", json={"refresh_token": refresh})
+        assert refresh_resp.status_code == 200
+        new_access = refresh_resp.json()["access_token"]
+        assert new_access != old_access
+
+        # Old access token should no longer work
+        old_resp = client.get(
+            "/api/v1/persons",
+            headers={"Authorization": f"Bearer {old_access}"},
+        )
+        assert old_resp.status_code == 403
+
+        # New access token should work
+        new_resp = client.get(
+            "/api/v1/persons",
+            headers={"Authorization": f"Bearer {new_access}"},
+        )
+        assert new_resp.status_code == 200

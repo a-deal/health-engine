@@ -12,12 +12,14 @@ POST /api/v1/generate-focus-plan
 
 import json
 import os
+import uuid
 from datetime import datetime
 
 import anthropic
 from fastapi import APIRouter, HTTPException, Request
 
 from engine.coaching.habit_catalogue import HABITS
+from engine.gateway.db import get_db, init_db
 
 router = APIRouter(prefix="/api/v1", tags=["focus-plan"])
 
@@ -198,9 +200,42 @@ async def generate_focus_plan(request: Request):
     _validate_citations(result)
 
     # Add metadata
-    result["generated_at"] = datetime.utcnow().isoformat()
+    now = datetime.utcnow().isoformat()
+    result["generated_at"] = now
     result["model"] = FOCUS_PLAN_MODEL
     result["catalogue_version"] = len(HABITS)
+
+    # Persist to focus_plan table if person_id provided
+    person_id = body.get("person_id")
+    if person_id:
+        plan_id = str(uuid.uuid4())
+        result["id"] = plan_id
+        primary = result.get("primaryRecommendation", {})
+        db = get_db()
+        init_db()
+        db.execute(
+            "INSERT INTO focus_plan (id, person_id, generated_at, health_snapshot, "
+            "reflection, insight, encouragement, primary_action, primary_anchor, "
+            "primary_reasoning, primary_category, primary_purpose, "
+            "alternatives_json, risk_assessment, care_team_note, "
+            "created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (plan_id, person_id, now,
+             result.get("healthSnapshot"),
+             result.get("reflection"),
+             result.get("insight"),
+             result.get("encouragement"),
+             primary.get("action"),
+             primary.get("anchor"),
+             primary.get("reasoning"),
+             primary.get("category"),
+             primary.get("purpose"),
+             json.dumps(result.get("alternatives", [])),
+             result.get("riskAssessment"),
+             result.get("careTeamRecommendation", {}).get("topic") if isinstance(result.get("careTeamRecommendation"), dict) else None,
+             now, now),
+        )
+        db.commit()
 
     return result
 

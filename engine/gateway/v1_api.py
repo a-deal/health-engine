@@ -21,14 +21,81 @@ Auth: same api_token as existing /api/ endpoints.
 import json
 import logging
 import os
+import secrets
 import time
 import uuid
 from datetime import datetime, timezone
 
+import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 logger = logging.getLogger("kiso.v1_api")
+
+# --- Apple Sign In constants ---
+
+APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys"
+APPLE_ISSUER = "https://appleid.apple.com"
+APPLE_AUDIENCE = "co.enchant.Hematica"
+_apple_jwks_cache: dict | None = None
+_apple_jwks_cache_time: float = 0
+_JWKS_CACHE_TTL = 3600  # 1 hour
+
+ACCESS_TOKEN_TTL = 3600 * 24  # 24 hours
+REFRESH_TOKEN_TTL = 3600 * 24 * 90  # 90 days
+
+
+def _fetch_apple_jwks() -> dict:
+    """Fetch Apple's JWKS public keys. Cached for 1 hour."""
+    global _apple_jwks_cache, _apple_jwks_cache_time
+    now = time.time()
+    if _apple_jwks_cache and (now - _apple_jwks_cache_time) < _JWKS_CACHE_TTL:
+        return _apple_jwks_cache
+    import urllib.request
+    with urllib.request.urlopen(APPLE_JWKS_URL, timeout=10) as resp:
+        _apple_jwks_cache = json.loads(resp.read())
+        _apple_jwks_cache_time = now
+        return _apple_jwks_cache
+
+
+def _verify_apple_identity_token(identity_token: str) -> dict:
+    """Verify an Apple identity token JWT. Returns decoded claims.
+
+    Raises HTTPException(401) on any verification failure.
+    """
+    try:
+        jwks = _fetch_apple_jwks()
+        # Get the signing key from JWKS
+        header = jwt.get_unverified_header(identity_token)
+        kid = header.get("kid")
+        key_data = None
+        for key in jwks.get("keys", []):
+            if key.get("kid") == kid:
+                key_data = key
+                break
+        if not key_data:
+            raise HTTPException(401, "Apple signing key not found")
+
+        # Build the public key from JWK
+        public_key = jwt.algorithms.RSAAlgorithm.from_jwk(key_data)
+
+        # Verify and decode
+        claims = jwt.decode(
+            identity_token,
+            public_key,
+            algorithms=["RS256"],
+            audience=APPLE_AUDIENCE,
+            issuer=APPLE_ISSUER,
+        )
+        return claims
+    except HTTPException:
+        raise
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(401, "Apple identity token expired")
+    except jwt.InvalidTokenError as e:
+        raise HTTPException(401, f"Invalid Apple identity token: {e}")
+    except Exception as e:
+        raise HTTPException(401, f"Apple token verification failed: {e}")
 
 from .db import (
     ENTITY_TABLES,
@@ -105,13 +172,11 @@ def _get_config(request: Request):
 
 
 def _verify_token(request: Request, token: str = Query(None)):
-    """Verify API token from query param or Authorization header.
+    """Verify API token from query param, Authorization header, or OAuth token table.
 
-    Accepts the main api_token or any key in token_persons.
+    Accepts: admin api_token, per-user token_persons keys, or OAuth access tokens.
     """
     config = _get_config(request)
-    if not config.api_token and not config.token_persons:
-        raise HTTPException(500, "API token not configured")
 
     effective = token
     if not effective:
@@ -132,6 +197,19 @@ def _verify_token(request: Request, token: str = Query(None)):
     if effective in config.token_persons:
         return effective
 
+    # Check OAuth access tokens
+    db = get_db()
+    init_db()
+    row = db.execute(
+        "SELECT person_id, expires_at, revoked FROM oauth_token "
+        "WHERE token = ? AND token_type = 'access'",
+        (effective,),
+    ).fetchone()
+    if row and not row["revoked"] and (not row["expires_at"] or row["expires_at"] > time.time()):
+        # Store resolved person_id on request state for _check_person_access
+        request.state.oauth_person_id = row["person_id"]
+        return effective
+
     raise HTTPException(403, "Invalid token")
 
 
@@ -140,6 +218,7 @@ def _check_person_access(request: Request, token: str, person_id: str):
 
     Admin token (api_token) can access everything.
     Per-user tokens can only access their mapped person IDs.
+    OAuth tokens can only access the person they were issued for.
     """
     config = _get_config(request)
     # Admin token: unrestricted
@@ -147,8 +226,13 @@ def _check_person_access(request: Request, token: str, person_id: str):
         return
     # Per-user token: check mapping
     allowed = config.token_persons.get(token, [])
-    if person_id not in allowed:
-        raise HTTPException(403, "Access denied for this person")
+    if person_id in allowed:
+        return
+    # OAuth token: check resolved person_id
+    oauth_pid = getattr(request.state, "oauth_person_id", None)
+    if oauth_pid and oauth_pid == person_id:
+        return
+    raise HTTPException(403, "Access denied for this person")
 
 
 # --- Helpers ---
@@ -705,6 +789,157 @@ def create_checkin(habit_id: str, body: CheckInCreate, request: Request, _token:
     )
     db.commit()
     return _get_or_404("check_in", cid)
+
+
+# --- Apple Sign In Auth ---
+
+@router.post("/auth/apple")
+async def auth_apple(request: Request):
+    """Exchange an Apple identity token for an access/refresh token pair.
+
+    Body: {"identity_token": "<JWT>", "person_id": "<optional>"}
+    """
+    body = await request.json()
+
+    identity_token = body.get("identity_token")
+    if not identity_token:
+        raise HTTPException(400, "identity_token is required")
+
+    # Verify the Apple JWT
+    claims = _verify_apple_identity_token(identity_token)
+    apple_sub = claims["sub"]
+
+    db = get_db()
+    init_db()
+
+    # Look up existing person by apple_user_identifier
+    row = db.execute(
+        "SELECT id FROM person WHERE apple_user_identifier = ? AND deleted_at IS NULL",
+        (apple_sub,),
+    ).fetchone()
+
+    if row:
+        person_id = row["id"]
+    else:
+        # Check if linking to an existing person
+        link_person_id = body.get("person_id")
+        if link_person_id:
+            existing = db.execute(
+                "SELECT id FROM person WHERE id = ? AND deleted_at IS NULL",
+                (link_person_id,),
+            ).fetchone()
+            if not existing:
+                raise HTTPException(404, f"Person {link_person_id} not found")
+            db.execute(
+                "UPDATE person SET apple_user_identifier = ?, updated_at = ? WHERE id = ?",
+                (apple_sub, _now_iso(), link_person_id),
+            )
+            db.commit()
+            person_id = link_person_id
+        else:
+            # Create new person
+            person_id = _new_id()
+            now = _now_iso()
+            name = claims.get("email", "").split("@")[0] or "User"
+            db.execute(
+                "INSERT INTO person (id, name, apple_user_identifier, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (person_id, name, apple_sub, now, now),
+            )
+            db.commit()
+
+    # Issue access + refresh tokens
+    access_token = secrets.token_urlsafe(32)
+    refresh_token = secrets.token_urlsafe(32)
+    now_ts = time.time()
+    now_iso = _now_iso()
+
+    db.execute(
+        "INSERT INTO oauth_token (token, token_type, client_id, person_id, scopes, expires_at, created_at) "
+        "VALUES (?, 'access', 'kasane-ios', ?, 'health', ?, ?)",
+        (access_token, person_id, now_ts + ACCESS_TOKEN_TTL, now_iso),
+    )
+    db.execute(
+        "INSERT INTO oauth_token (token, token_type, client_id, person_id, scopes, expires_at, created_at) "
+        "VALUES (?, 'refresh', 'kasane-ios', ?, 'health', ?, ?)",
+        (refresh_token, person_id, now_ts + REFRESH_TOKEN_TTL, now_iso),
+    )
+    db.commit()
+
+    logger.info("Apple auth: person=%s apple_sub=%s", person_id, apple_sub[:8])
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "expires_in": ACCESS_TOKEN_TTL,
+        "person_id": person_id,
+    }
+
+
+@router.post("/auth/refresh")
+async def auth_refresh(request: Request):
+    """Exchange a refresh token for a new access/refresh token pair.
+
+    Body: {"refresh_token": "..."}
+    """
+    body = await request.json()
+
+    refresh_token = body.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(400, "refresh_token is required")
+
+    db = get_db()
+    init_db()
+
+    row = db.execute(
+        "SELECT person_id, expires_at, revoked FROM oauth_token "
+        "WHERE token = ? AND token_type = 'refresh'",
+        (refresh_token,),
+    ).fetchone()
+
+    if not row:
+        raise HTTPException(401, "Invalid refresh token")
+    if row["revoked"]:
+        raise HTTPException(401, "Refresh token revoked")
+    if row["expires_at"] and row["expires_at"] < time.time():
+        raise HTTPException(401, "Refresh token expired")
+
+    person_id = row["person_id"]
+
+    # Revoke old tokens for this person+client
+    db.execute(
+        "UPDATE oauth_token SET revoked = 1 WHERE person_id = ? AND client_id = 'kasane-ios'",
+        (person_id,),
+    )
+
+    # Issue new pair
+    new_access = secrets.token_urlsafe(32)
+    new_refresh = secrets.token_urlsafe(32)
+    now_ts = time.time()
+    now_iso = _now_iso()
+
+    db.execute(
+        "INSERT INTO oauth_token (token, token_type, client_id, person_id, scopes, expires_at, created_at) "
+        "VALUES (?, 'access', 'kasane-ios', ?, 'health', ?, ?)",
+        (new_access, person_id, now_ts + ACCESS_TOKEN_TTL, now_iso),
+    )
+    db.execute(
+        "INSERT INTO oauth_token (token, token_type, client_id, person_id, scopes, expires_at, created_at) "
+        "VALUES (?, 'refresh', 'kasane-ios', ?, 'health', ?, ?)",
+        (new_refresh, person_id, now_ts + REFRESH_TOKEN_TTL, now_iso),
+    )
+    db.commit()
+
+    logger.info("Token refresh: person=%s", person_id)
+
+    return {
+        "access_token": new_access,
+        "refresh_token": new_refresh,
+        "token_type": "bearer",
+        "expires_in": ACCESS_TOKEN_TTL,
+        "person_id": person_id,
+    }
 
 
 # --- Focus Plans ---
