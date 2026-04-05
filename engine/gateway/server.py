@@ -882,6 +882,7 @@ button:hover {{ background: #333; }}
                 "give 1-2 nudges. Never dump raw JSON."
             ),
             streamable_http_path="/",
+            stateless_http=True,
             transport_security=TransportSecuritySettings(
                 enable_dns_rebinding_protection=True,
                 allowed_hosts=allowed_hosts,
