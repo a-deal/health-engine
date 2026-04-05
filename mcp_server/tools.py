@@ -2285,6 +2285,28 @@ def _check_engagement(user_id: str | None = None) -> dict:
     }
 
 
+def _send_message(user_id: str, message: str) -> dict:
+    """Send a message to a user on their configured channel (WhatsApp/Telegram)."""
+    if not user_id or not message:
+        return {"error": "user_id and message are required"}
+
+    from engine.gateway.db import get_db, init_db
+    from engine.gateway.scheduler import _send_and_ingest
+
+    init_db()
+    db = get_db()
+    row = db.execute(
+        "SELECT channel, channel_target FROM person "
+        "WHERE health_engine_user_id = ? AND deleted_at IS NULL",
+        (user_id,),
+    ).fetchone()
+    if not row or not row["channel"] or not row["channel_target"]:
+        return {"error": f"No channel configured for user '{user_id}'"}
+
+    result = _send_and_ingest(db, user_id, row["channel"], row["channel_target"], message)
+    return {"user_id": user_id, "channel": row["channel"], **result}
+
+
 def _log_nudge(user_id: str, nudge_type: str) -> dict:
     data_dir = _data_dir(user_id)
     nudge_path = data_dir / "nudge_state.json"
@@ -3697,6 +3719,7 @@ TOOL_REGISTRY = {
     "get_protocols": _get_protocols,
     "log_weight": _log_weight,
     "delete_weight": _delete_weight,
+    "send_message": _send_message,
     "log_bp": _log_bp,
     "log_habits": _log_habits,
     "log_supplements": _log_supplements,
@@ -4170,6 +4193,11 @@ def register_tools(mcp: FastMCP):
     def complete_coach_task(task_id: str) -> dict:
         """Mark a coach task as completed. Andrew calls this after reviewing and acting on a task."""
         return _complete_coach_task(task_id)
+
+    @mcp.tool()
+    def send_message(user_id: str, message: str) -> dict:
+        """Send a message to a user on their configured channel (WhatsApp/Telegram). The message is also saved to conversation history so future get_conversations calls include it."""
+        return _send_message(_effective_user_id(user_id), message)
 
     @mcp.tool()
     def save_coaching_message(person_id: str, message_text: str, habit_id: str | None = None, message_type: str = "coaching", user_id: str | None = None) -> dict:
