@@ -273,7 +273,7 @@ def get_weights(user_id: str | None = None, data_dir: Path | None = None) -> lis
         ).fetchall()
         db.close()
         if rows:
-            return [{"date": r["date"], "weight_lbs": str(r["weight_lbs"]), "source": r["source"] or ""} for r in rows]
+            return [{"date": r["date"], "weight_lbs": str(r["weight_lbs"]), "source": r["source"] or ""} for r in rows if r["weight_lbs"] is not None]
     except Exception:
         pass
     # CSV fallback (repo mode only)
@@ -296,7 +296,7 @@ def get_bp(user_id: str | None = None, data_dir: Path | None = None) -> list[dic
         ).fetchall()
         db.close()
         if rows:
-            return [{"date": r["date"], "systolic": str(r["systolic"]), "diastolic": str(r["diastolic"]), "source": r["source"] or ""} for r in rows]
+            return [{"date": r["date"], "systolic": str(r["systolic"]), "diastolic": str(r["diastolic"]), "source": r["source"] or ""} for r in rows if r["systolic"] is not None and r["diastolic"] is not None]
     except Exception:
         pass
     if data_dir:
@@ -471,7 +471,10 @@ def get_strength(user_id: str | None = None, data_dir: Path | None = None) -> li
         ).fetchall()
         db.close()
         if rows:
-            return [{"date": r["date"], "exercise": r["exercise"], "weight_lbs": str(r["weight_lbs"]), "reps": str(r["reps"]), "rpe": str(r["rpe"] or "")} for r in rows]
+            return [{"date": r["date"], "exercise": r["exercise"],
+                     "weight_lbs": str(r["weight_lbs"]) if r["weight_lbs"] is not None else "0",
+                     "reps": str(r["reps"]) if r["reps"] is not None else "0",
+                     "rpe": str(r["rpe"]) if r["rpe"] is not None else ""} for r in rows]
     except Exception:
         pass
     if data_dir:

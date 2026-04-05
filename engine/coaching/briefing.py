@@ -1059,7 +1059,13 @@ def _load_weight_log(data_dir: Path, person_id: str | None = None) -> Optional[l
     user_id = _user_id_from_person(person_id)
     rows = get_weights(user_id, data_dir)
     if rows:
-        return [{"weight": float(r["weight_lbs"]), "date": r["date"]} for r in rows]
+        result = []
+        for r in rows:
+            try:
+                result.append({"weight": float(r["weight_lbs"]), "date": r["date"]})
+            except (ValueError, TypeError):
+                continue
+        return result or None
     return None
 
 
@@ -1068,7 +1074,13 @@ def _load_bp_log(data_dir: Path, person_id: str | None = None) -> Optional[list]
     user_id = _user_id_from_person(person_id)
     rows = get_bp(user_id, data_dir)
     if rows:
-        return [{"sys": float(r["systolic"]), "dia": float(r["diastolic"]), "date": r.get("date", "")} for r in rows]
+        result = []
+        for r in rows:
+            try:
+                result.append({"sys": float(r["systolic"]), "dia": float(r["diastolic"]), "date": r.get("date", "")})
+            except (ValueError, TypeError):
+                continue
+        return result or None
     return None
 
 

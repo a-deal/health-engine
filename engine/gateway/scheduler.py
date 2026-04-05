@@ -595,17 +595,27 @@ def _gather_context(schedule_type: str, user_id: str) -> dict:
     from mcp_server.tools import _checkin, _score, _get_protocols
 
     context = {}
-    try:
-        if schedule_type in ("morning_brief", "evening_checkin"):
+
+    # Each data source gets its own try/except so a failure in one
+    # (e.g. _get_protocols) doesn't discard already-fetched data (e.g. checkin).
+    if schedule_type in ("morning_brief", "evening_checkin", "weekly_review"):
+        try:
             context["checkin"] = _checkin(user_id=user_id)
-        if schedule_type == "evening_checkin":
+        except Exception as e:
+            logger.warning("Failed to gather checkin for %s/%s: %s", user_id, schedule_type, e)
+            context["checkin_error"] = str(e)
+
+    if schedule_type == "evening_checkin":
+        try:
             context["protocols"] = _get_protocols(user_id=user_id)
-        if schedule_type == "weekly_review":
-            context["checkin"] = _checkin(user_id=user_id)
+        except Exception as e:
+            logger.warning("Failed to gather protocols for %s/%s: %s", user_id, schedule_type, e)
+
+    if schedule_type == "weekly_review":
+        try:
             context["score"] = _score(user_id=user_id)
-    except Exception as e:
-        logger.warning("Failed to gather context for %s/%s: %s", user_id, schedule_type, e)
-        context["error"] = str(e)
+        except Exception as e:
+            logger.warning("Failed to gather score for %s/%s: %s", user_id, schedule_type, e)
 
     return context
 

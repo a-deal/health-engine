@@ -725,3 +725,91 @@ class TestMeasureOutcomesWiring:
         data = resp.json()
         assert data["measured_count"] == 1
         mock_measure.assert_called_once()
+
+
+# --- _gather_context isolation tests ---
+
+
+class TestGatherContextIsolation:
+    """Verify that _gather_context uses separate try/except blocks so a
+    failure in one data source doesn't discard already-fetched data."""
+
+    def test_checkin_failure_sets_error_key(self):
+        """If _checkin throws, context should have checkin_error but no checkin."""
+        from engine.gateway.scheduler import _gather_context
+
+        with patch("mcp_server.tools._checkin", side_effect=ValueError("could not convert string to float: 'None'")):
+            ctx = _gather_context("morning_brief", "andrew")
+
+        assert "checkin" not in ctx
+        assert "checkin_error" in ctx
+        assert "'None'" in ctx["checkin_error"]
+
+    def test_protocols_failure_preserves_checkin(self):
+        """If _get_protocols throws, the already-fetched checkin should survive."""
+        from engine.gateway.scheduler import _gather_context
+
+        fake_checkin = {"data_available": {"garmin": True}, "score": {"coverage": 6}}
+        with patch("mcp_server.tools._checkin", return_value=fake_checkin), \
+             patch("mcp_server.tools._get_protocols", side_effect=Exception("db locked")):
+            ctx = _gather_context("evening_checkin", "andrew")
+
+        assert ctx["checkin"] == fake_checkin
+        assert "protocols" not in ctx
+
+    def test_score_failure_preserves_checkin_for_weekly(self):
+        """If _score throws during weekly_review, checkin should survive."""
+        from engine.gateway.scheduler import _gather_context
+
+        fake_checkin = {"data_available": {"garmin": True}, "score": {"coverage": 6}}
+        with patch("mcp_server.tools._checkin", return_value=fake_checkin), \
+             patch("mcp_server.tools._score", side_effect=Exception("timeout")):
+            ctx = _gather_context("weekly_review", "andrew")
+
+        assert ctx["checkin"] == fake_checkin
+        assert "score" not in ctx
+
+
+# --- db_read NULL handling tests ---
+
+
+class TestStrengthNoneHandling:
+    """Verify that strength.py handles 'None' string values from db_read
+    without crashing. This was the root cause of the evening scheduler bug:
+    bodyweight exercises have NULL weight_lbs in SQLite, db_read.get_strength
+    converted str(None) -> 'None', then float('None') crashed."""
+
+    def test_progression_handles_none_string_weight(self):
+        """progression_summary should not crash on 'None' weight_lbs."""
+        from engine.tracking.strength import progression_summary
+
+        lift_history = [
+            {"date": "2026-04-04", "exercise": "Squat", "weight_lbs": "315", "reps": "5", "rpe": "8"},
+            {"date": "2026-04-04", "exercise": "Squat", "weight_lbs": "None", "reps": "None", "rpe": ""},
+            {"date": "2026-04-04", "exercise": "Squat", "weight_lbs": "0", "reps": "0", "rpe": ""},
+        ]
+        result = progression_summary(lift_history, "Squat")
+        assert result is not None
+        assert result["peak_1rm"] > 0
+
+    def test_progression_handles_none_reps(self):
+        """progression_summary should not crash on 'None' reps."""
+        from engine.tracking.strength import progression_summary
+
+        lift_history = [
+            {"date": "2026-04-04", "exercise": "Sled Pull", "weight_lbs": "None", "reps": "None", "rpe": "None"},
+        ]
+        result = progression_summary(lift_history, "Sled Pull")
+        assert result is not None
+
+    def test_clinical_assess_handles_none_string(self):
+        """_apply_clinical should not crash on string 'None' values."""
+        from engine.scoring.engine import _apply_clinical
+        from engine.models import Demographics, MetricResult
+
+        demo = Demographics(age=35, sex="M")
+        result = MetricResult(name="rhr", tier=1, rank=1, has_data=True)
+        # Should not raise - the string "None" should be caught
+        _apply_clinical(result, "rhr", "None", demo)
+        # clinical_zone should remain at its default (empty string), not crash
+        assert result.clinical_zone == ""

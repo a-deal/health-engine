@@ -82,9 +82,20 @@ def progression_summary(
 
     # Calculate estimated 1RM for each set
     for s in filtered:
-        weight = float(s.get("weight_lbs", 0))
-        reps = int(s.get("reps", 0) or 0)
-        rpe = float(s["rpe"]) if s.get("rpe") else None
+        try:
+            weight = float(s.get("weight_lbs") or 0)
+        except (ValueError, TypeError):
+            weight = 0
+        try:
+            reps = int(float(s.get("reps") or 0))
+        except (ValueError, TypeError):
+            reps = 0
+        rpe = None
+        if s.get("rpe"):
+            try:
+                rpe = float(s["rpe"])
+            except (ValueError, TypeError):
+                pass
         if weight > 0 and reps > 0:
             s["est_1rm"] = est_1rm(weight, reps, rpe)
         else:

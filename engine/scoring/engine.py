@@ -148,7 +148,11 @@ def assess(value: Optional[float], table: dict, demo: Demographics,
 def _apply_clinical(result: MetricResult, clinical_key: str, value, demo: Demographics):
     """Apply clinical zone assessment to a MetricResult."""
     if value is not None:
-        zone, note = clinical_assess(clinical_key, float(value), demo.age, demo.sex)
+        try:
+            fval = float(value)
+        except (ValueError, TypeError):
+            return
+        zone, note = clinical_assess(clinical_key, fval, demo.age, demo.sex)
         result.clinical_zone = zone
         result.clinical_note = note
 
