@@ -1877,23 +1877,19 @@ def _connect_wearable(service: str, user_id: str | None = None) -> dict:
     if not user_id:
         return {"error": "user_id is required. Pass the user_id for the person you are connecting a wearable for."}
     if service in ("apple_health", "apple_watch", "apple"):
-        install_url = "https://www.icloud.com/shortcuts/b0c11b2912c1434fad4a2d87f4d2a762"
         return {
             "service": "apple_health",
             "supported": True,
-            "setup_method": "icloud_link",
-            "install_url": install_url,
+            "setup_method": "ios_app",
             "coach_instructions": (
-                "Apple Watch is fully supported. Send TWO messages:\n"
-                "Message 1: Send the install_url link. Say: "
-                "'Tap this link to add a shortcut that syncs your Apple Watch "
-                "data to me every morning. When it opens, tap Add Shortcut.'\n"
-                "Message 2: After they confirm it installed, say: "
-                "'Now open Shortcuts, tap Automation at the bottom, tap +, "
-                "pick Time of Day, set 7 AM, choose Baseline Health Sync, "
-                "and turn off Ask Before Running. That is it.'\n"
-                "The first time it runs, their phone will ask permission to "
-                "read health data. Just tap Allow for everything.\n"
+                "Apple Health is fully supported via the Baseline Sync iOS app.\n"
+                "Tell the user: 'Download the Baseline app from TestFlight. "
+                "Sign in with your Apple ID, and it will sync your health data "
+                "automatically every morning.'\n"
+                "If they need the TestFlight link, ask Andrew for the current invite.\n"
+                "The app reads heart rate, HRV, steps, sleep, weight, VO2 max, "
+                "blood oxygen, calories, and respiratory rate. All metrics are optional. "
+                "Whatever the watch tracks, it sends.\n"
                 "Do NOT use technical language. Do NOT mention APIs, JSON, tokens, "
                 "signing, or endpoints."
             ),
@@ -2840,10 +2836,10 @@ def _check_health_priorities_tool(user_id: str | None = None) -> dict:
 
 
 # =====================================================================
-# Apple Health Shortcut ingest
+# Apple Health ingest (via Baseline Sync iOS app or direct API call)
 # =====================================================================
 
-# Valid metric keys that the Shortcut can send
+# Valid metric keys for Apple Health ingestion
 _APPLE_HEALTH_METRICS = {
     "resting_hr", "hrv_sdnn", "steps", "sleep_hours",
     "sleep_start", "sleep_end", "weight_lbs", "vo2_max",
@@ -2856,7 +2852,7 @@ def _ingest_health_snapshot(
     metrics: dict,
     timestamp: str | None = None,
 ) -> dict:
-    """Ingest a daily health snapshot from an iOS Shortcut (Apple Health bridge).
+    """Ingest a daily health snapshot (Apple Health bridge via Baseline Sync app).
 
     Accepts a flat dict of metrics from HealthKit, appends to a daily time
     series file, and updates a rolling-average latest file for scoring.
@@ -2891,7 +2887,7 @@ def _ingest_health_snapshot(
             "valid_keys": sorted(_APPLE_HEALTH_METRICS),
         }
 
-    # --- Validation: catch shortcut bugs before they corrupt data ---
+    # --- Validation: catch ingestion bugs before they corrupt data ---
     import logging
     _ingest_log = logging.getLogger("kiso.ingest")
     warnings = []
@@ -2902,7 +2898,7 @@ def _ingest_health_snapshot(
         try:
             steps_val = float(clean["steps"])
             if steps_val < 50:
-                rejections.append(f"steps={steps_val} is impossibly low (shortcut may be querying today's partial, not yesterday's total)")
+                rejections.append(f"steps={steps_val} is impossibly low (may be querying today's partial, not yesterday's total)")
                 del clean["steps"]
             elif steps_val < 500:
                 warnings.append(f"steps={steps_val} seems low but accepted")
@@ -3039,7 +3035,7 @@ def _ingest_health_snapshot(
         "sleep_duration_avg": _rolling_avg("sleep_hours"),
         "vo2_max": _latest_val("vo2_max"),
         "sleep_regularity_stddev": None,  # Can't compute from single daily snapshots
-        "zone2_min_per_week": None,  # Not available from Shortcuts
+        "zone2_min_per_week": None,  # Not available from Apple Health ingest
         "metadata": {
             "hrv_method": "SDNN",
             "hrv_sdnn_to_rmssd_factor": _SDNN_TO_RMSSD,
@@ -3965,7 +3961,7 @@ def register_tools(mcp: FastMCP):
     def connect_wearable(service: str, user_id: str | None = None) -> dict:
         """Get connection instructions for a wearable device.
         For OAuth services (garmin, oura, whoop): returns a tappable auth link.
-        For Apple Health/Apple Watch: returns iOS Shortcuts setup instructions.
+        For Apple Health/Apple Watch: returns Baseline Sync iOS app setup instructions.
 
         Args:
             service: Wearable service name (garmin, oura, whoop, apple_health, apple_watch, apple)
@@ -4164,7 +4160,7 @@ def register_tools(mcp: FastMCP):
 
     @mcp.tool()
     def ingest_health_snapshot(user_id: str, metrics: dict, timestamp: str | None = None) -> dict:
-        """Ingest a daily health snapshot from an iOS Shortcut (Apple Health bridge). Accepts a flat dict of metric values from HealthKit. Valid keys: resting_hr, hrv_sdnn, steps, sleep_hours, sleep_start, sleep_end, weight_lbs, vo2_max, blood_oxygen, active_calories, respiratory_rate. All metrics optional individually. Appends to daily series and updates rolling averages for scoring."""
+        """Ingest a daily health snapshot (Apple Health bridge via Baseline Sync app). Accepts a flat dict of metric values from HealthKit. Valid keys: resting_hr, hrv_sdnn, steps, sleep_hours, sleep_start, sleep_end, weight_lbs, vo2_max, blood_oxygen, active_calories, respiratory_rate. All metrics optional individually. Appends to daily series and updates rolling averages for scoring."""
         return _ingest_health_snapshot(_effective_user_id(user_id), metrics, timestamp)
 
     @mcp.tool()

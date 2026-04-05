@@ -1,4 +1,4 @@
-"""Tests for Apple Health Shortcut ingest endpoint."""
+"""Tests for Apple Health ingest endpoint (Baseline Sync app)."""
 
 import json
 import os
@@ -210,7 +210,7 @@ class TestIngestEndpoint:
         return TestClient(app)
 
     def test_post_with_token_in_body(self, client, tmp_path):
-        """iOS Shortcuts send token in JSON body, not query param."""
+        """Token can be sent in JSON body, not just query param."""
         data_dir = tmp_path / "data" / "users" / "paul"
         data_dir.mkdir(parents=True)
 
@@ -261,7 +261,7 @@ class TestIngestEndpoint:
         assert response.status_code == 403
 
     def test_get_with_flat_metric_params(self, client, tmp_path):
-        """iOS Shortcuts simplified flow: flat query params instead of nested metrics dict."""
+        """Simplified flow: flat query params instead of nested metrics dict."""
         data_dir = tmp_path / "data" / "users" / "default"
         data_dir.mkdir(parents=True)
 
@@ -435,3 +435,32 @@ class TestIngestWritesWearableDaily:
         assert result["ingested"] is True
 
         close_db()
+
+
+class TestConnectWearableAppleHealth:
+    """Verify connect_wearable returns Baseline Sync instructions, not Shortcuts."""
+
+    def test_returns_baseline_sync_not_shortcuts(self):
+        from mcp_server.tools import _connect_wearable
+
+        result = _connect_wearable("apple_health", user_id="test_user")
+        assert result["supported"] is True
+        assert result["setup_method"] == "ios_app"
+        instructions = result["coach_instructions"].lower()
+        assert "baseline" in instructions
+        assert "shortcut" not in instructions
+        assert "icloud.com" not in instructions
+
+    def test_apple_watch_alias(self):
+        from mcp_server.tools import _connect_wearable
+
+        result = _connect_wearable("apple_watch", user_id="test_user")
+        assert result["supported"] is True
+        assert result["setup_method"] == "ios_app"
+
+    def test_apple_alias(self):
+        from mcp_server.tools import _connect_wearable
+
+        result = _connect_wearable("apple", user_id="test_user")
+        assert result["supported"] is True
+        assert result["setup_method"] == "ios_app"

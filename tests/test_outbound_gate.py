@@ -227,8 +227,8 @@ class TestFalsePositiveFixes:
 
     def test_auth_url_with_user_id_not_flagged(self):
         msg = (
-            "Tap this link to install the sync shortcut:\n"
-            "https://auth.mybaseline.health/api/shortcut?token=abc123&user_id=paul"
+            "Tap this link to connect your Garmin:\n"
+            "https://auth.mybaseline.health/auth/garmin?user=paul&state=paul:garmin:abc123"
         )
         result = validate_outbound(msg)
         assert result.ok, f"False positive: user_id in auth URL flagged: {result.details}"

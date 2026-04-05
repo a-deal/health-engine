@@ -36,8 +36,6 @@ Kasane (iOS) ----> /api/v1/* ----> SQLite (kasane.db)
                                       | person.healthEngineUserId
                                       v
 Milo (agent) ----> MCP tools ----> SQLite + CSVs (data/users/<user_id>/)
-                                      ^
-iOS Shortcuts ---> /api/{tool} ------/
 ```
 
 **Storage (SQLite-first, CSV fallback):**
@@ -139,12 +137,12 @@ engine/
 
 mcp_server/
   server.py        FastMCP entry point
-  tools.py         52 tool implementations + registry
+  tools.py         59+ tool implementations + registry
 
 workspace/         Milo agent files (deployed to Mac Mini)
 data/              Local-first storage (gitignored)
 scripts/           Admin + seed scripts
-tests/             592+ tests
+tests/             880+ tests
 docs/              API, Architecture, Roadmap, Methodology
 ```
 
@@ -153,7 +151,7 @@ docs/              API, Architecture, Roadmap, Methodology
 - Never hardcode secrets in source files
 - Thresholds go in `engine/insights/rules.yaml`, not in code. Per-user overrides go in `data/users/<user_id>/rules.yaml`.
 - Use `python3` not `python`
-- Run tests: `python3 -m pytest tests/ -v` — all 592+ must pass
+- Run tests: `python3 -m pytest tests/ -v` — all 880+ must pass
 - Smoke test end-to-end before pushing
 - **Test with REAL user data, not just unit tests.** Unit tests passing does not mean the feature works for actual users. Before declaring a feature done, verify with at least one real user's data (e.g., run the briefing for Grigoriy and check that insights make sense for a 42M sedentary male, not just for Andrew).
 

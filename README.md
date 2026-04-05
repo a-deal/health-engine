@@ -48,7 +48,7 @@ python3 -m pytest tests/ -v
 | Kasane sync | `POST /api/v1/sync` | iOS app |
 | Kasane CRUD | `/api/v1/persons`, `/api/v1/habits`, etc. | iOS app |
 | Person context | `GET /api/v1/persons/:id/context` | Milo |
-| Health tools | `/api/{tool_name}` | Milo, iOS Shortcuts |
+| Health tools | `/api/{tool_name}` | Milo |
 | Wearable auth | `/auth/garmin`, `/auth/google` | Browser (OAuth) |
 
 Full API reference: [docs/API.md](docs/API.md)

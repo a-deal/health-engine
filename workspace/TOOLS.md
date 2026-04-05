@@ -89,12 +89,54 @@ web_fetch("https://auth.mybaseline.health/api/log_habits?token=NZCT4pzvxC36OSaCz
 | pull_oura | history, user_id | Pull fresh Oura Ring data. |
 | connect_whoop | user_id | Check WHOOP connection status. |
 | pull_whoop | history, user_id | Pull fresh WHOOP data. |
-| connect_wearable | service, user_id | Get connection instructions for any wearable. Supports: garmin, oura, whoop (OAuth link), apple_health/apple_watch (iOS Shortcuts guide). |
+| connect_wearable | service, user_id | Get connection instructions for any wearable. Supports: garmin, oura, whoop (OAuth link), apple_health/apple_watch (Baseline Sync iOS app). |
 | import_apple_health | file_path, user_id | Import an Apple Health export ZIP or XML file. |
-| ingest_health_snapshot | user_id, metrics (JSON) | Receive a daily health snapshot from an iOS Shortcut. See Apple Health Shortcuts section below. |
+| ingest_health_snapshot | user_id, metrics (JSON) | Receive a daily health snapshot from the Baseline Sync iOS app. See Apple Health section below. |
 | check_health_priorities | user_id | Scan labs and vitals for red flags. Returns flags with severity, coaching messages, and connections to the user's current goal. Call after new lab results arrive. |
 | check_engagement | user_id | Check if user engaged after onboarding. Returns nudge recommendations. |
 | onboard | user_id | Coverage map + guided setup. All 20 metrics, what is tracked vs missing. |
+
+### Messaging & Coaching
+
+| Tool | Key Params | What it does |
+|------|-----------|------|
+| send_message | user_id, message | Send a message to a user on their configured channel (WhatsApp/Telegram). Also saved to conversation history. |
+| save_coaching_message | person_id, message_text, habit_id, message_type, user_id | Save a coaching message to kasane.db so it syncs to the Kasane iOS app. Call after sending a coaching response. |
+| get_person_context | person_id, user_id | Unified coaching context: profile, habits, check-ins from Kasane + health metrics. Look up by person_id or user_id. |
+| get_family_summary | person_id | Daily digest of a person's habits, check-ins, streaks, and health data. For family member updates. |
+| get_coaching_resource | topic | Load coaching methodology and conversation flows. Topics: 'onboarding', 'program-engine', 'self-review'. MUST call after onboard() for the full coaching flow. |
+| search_podcasts | query, limit | Search 100+ podcast transcripts by keyword. Returns matching passages with episode, date, and context. |
+
+### Calendar
+
+| Tool | Key Params | What it does |
+|------|-----------|------|
+| calendar_list_events | time_min, time_max, max_results, query, calendar_id, user_id | List upcoming Google Calendar events. Use time_min/time_max (ISO 8601) to filter. |
+| calendar_create_event | summary, start, end, description, location, calendar_id, user_id | Create a Google Calendar event. Start/end: ISO 8601 datetime or YYYY-MM-DD for all-day. |
+| calendar_search_events | query, time_min, time_max, max_results, calendar_id, user_id | Search calendar events by text (titles, descriptions, locations). |
+| calendar_update_event | event_id, summary, start, end, description, location, calendar_id, user_id | Update an existing calendar event. |
+| calendar_delete_event | event_id, calendar_id, user_id | Delete a calendar event. |
+
+### Coach Tasks (human-in-the-loop escalation)
+
+| Tool | Key Params | What it does |
+|------|-----------|------|
+| log_coach_task | user_id, task_type, description, priority, context | Create a task for Andrew. Types: lab_review, re_engagement, onboarding_review, compound_pattern, custom. |
+| get_coach_tasks | status | Get pending coach tasks. Default: "pending". |
+| complete_coach_task | task_id | Mark a coach task as completed. |
+
+### Data Correction
+
+| Tool | Key Params | What it does |
+|------|-----------|------|
+| delete_weight | date, user_id | Delete a weight entry for a specific date. Use when a user reports a bad reading. |
+
+### Training Load
+
+| Tool | Key Params | What it does |
+|------|-----------|------|
+| log_session | rpe, duration_min, session_type, name, date, user_id | Log a training session RPE (1-10). Call after any workout. Merges with Garmin data for ACWR. |
+| open_dashboard | user_id | Open the health dashboard in a browser. Refreshes data first. |
 
 ## Examples
 
@@ -159,14 +201,7 @@ Before giving ANY nutrition advice (what to eat, how much room is left, whether
 to eat more), call get_meals FIRST. No exceptions. Even if you just logged a meal
 30 seconds ago. Even if you "know" the total. Read from disk.
 
-### Google Calendar
-
-| Tool | Key Params | What it does |
-|------|-----------|------|
-| calendar_list_events | time_min, time_max, max_results, query, calendar_id | List upcoming events. calendar_id defaults to primary. |
-| calendar_create_event | summary, start, end, description, location, calendar_id | Create a calendar event. Times in ISO 8601 (2026-03-22T14:00:00). |
-| calendar_search_events | query, time_min, time_max, max_results, calendar_id | Search events by text. |
-| connect_google_calendar | user_id | Generate OAuth link for connecting Google Calendar (new users). |
+### Google Calendar Reference
 
 **Calendar IDs for Andrew:**
 - `primary` — default calendar (meetings, personal)
@@ -197,15 +232,15 @@ web_fetch("https://auth.mybaseline.health/api/get_skill_ladder?token=NZCT4pzvxC3
 
 Returns ranked levels with diagnostic questions. Walk the ladder from Level 1: ask the diagnostic question, if they have it handled, move to the next level. First unmastered level = their 14-day program focus. See COACH.md for full onboarding flow.
 
-### Apple Health Shortcuts Bridge (for Apple Watch users)
+### Apple Health (via Baseline Sync iOS app)
 
-Apple Watch is fully supported. When a user says they have an Apple Watch:
+Apple Health is fully supported. When a user says they have an Apple Watch or iPhone with Health data:
 
-1. Send them the install link: "Tap this link to add a shortcut that syncs your Apple Watch data to me every morning. When it opens, tap Add Shortcut." Link: https://www.icloud.com/shortcuts/b0c11b2912c1434fad4a2d87f4d2a762
-2. After they confirm it installed: "Now open Shortcuts, tap Automation at the bottom, tap +, pick Time of Day, set 7 AM, choose Baseline Health Sync, and turn off Ask Before Running. That's it."
-3. "The first time it runs, your phone will ask permission to read your health data. Just tap Allow for everything."
+1. Tell them: "Download the Baseline app from TestFlight. Sign in with your Apple ID, and it will sync your health data automatically every morning."
+2. If they need the TestFlight link, ask Andrew for the current invite.
+3. "The app reads your health data and syncs it automatically. You don't need to do anything after setup."
 
-The shortcut reads 9 health metrics (heart rate, HRV, steps, sleep, weight, VO2 max, blood oxygen, calories, respiratory rate) and sends them automatically. All metrics are optional. Whatever the watch tracks, it sends.
+The app syncs 9 health metrics (heart rate, HRV, steps, sleep, weight, VO2 max, blood oxygen, calories, respiratory rate). All metrics are optional. Whatever the device tracks, it sends.
 
 **NEVER use technical language with users.** No "API", "JSON", "endpoint", "token", "POST", "HealthKit", or "payload". The user should feel like they're installing a simple phone feature, not configuring software.
 

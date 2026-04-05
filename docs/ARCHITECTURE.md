@@ -8,7 +8,6 @@ Kiso is a monolithic Python backend serving three clients from one process.
 |--------|---------|----------|
 | **Kasane** (iOS app) | `/api/v1/*` | REST + sync |
 | **Milo** (coaching agent) | MCP tools + `/api/{tool_name}` | MCP / HTTP GET |
-| **iOS Shortcuts** | `/api/{tool_name}` | HTTP GET |
 
 ## Storage: Two Systems, One Bridge
 
@@ -43,9 +42,6 @@ Milo (get_person_context tool)
   |
   v
 /api/{tool_name} ──> CSVs (weight, meals, labs...)
-  ^
-  |
-iOS Shortcuts
 ```
 
 ## Auth

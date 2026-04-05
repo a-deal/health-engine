@@ -220,7 +220,7 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
         app.mount("/dashboard", StaticFiles(directory=str(dashboard_dir), html=True), name="dashboard")
 
     # --- Health-engine tool API + transcript viewer ---
-    from .api import api_handler, api_list_tools, api_async_handler, api_job_status, api_upload, api_shortcut, open_shortcut_redirect, open_automation_redirect
+    from .api import api_handler, api_list_tools, api_async_handler, api_job_status, api_upload
     from .transcripts import transcripts_api, transcripts_html
     from .v1_api import register_v1_routes
     from .focus_plan_api import router as focus_plan_router
@@ -249,9 +249,6 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
     app.get("/api/transcripts")(transcripts_api)
     app.get("/api/job_status")(api_job_status)
     app.post("/api/upload")(api_upload)
-    app.get("/api/shortcut")(api_shortcut)
-    app.get("/open/shortcut")(open_shortcut_redirect)
-    app.get("/open/automation")(open_automation_redirect)
     app.get("/transcripts")(transcripts_html)
     # Wildcard tool dispatch — handles both sync and async (_async suffix)
     app.get("/api/{tool_name}")(api_handler)
@@ -288,58 +285,8 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
         state = _sign_state(user_id, service)
         return f"{config.base_url}/auth/{service}?user={user_id}&state={state}"
 
-    def _sign_shortcut_url(user_id: str) -> str:
-        """Generate HMAC signature for a shortcut download URL (no expiry)."""
-        payload = f"shortcut:{user_id}"
-        return hmac.new(_hmac_secret.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
-
-    def _verify_shortcut_sig(user_id: str, sig: str) -> bool:
-        """Verify shortcut download signature."""
-        expected = _sign_shortcut_url(user_id)
-        return hmac.compare_digest(sig, expected)
-
-    def generate_shortcut_url(user_id: str) -> str:
-        """Generate a clean, signed shortcut download URL."""
-        sig = _sign_shortcut_url(user_id)
-        return f"{config.base_url}/s/{user_id}/{sig}"
-
-    @app.get("/s/{user_id}/{sig}")
-    async def serve_shortcut(user_id: str, sig: str):
-        """Serve a .shortcut file from a clean URL (no query params).
-
-        GET /s/paul/abc123def456
-
-        Serves pre-signed file if available, otherwise generates unsigned.
-        Safari handles the .shortcut extension and prompts to open in Shortcuts.
-        """
-        if not _verify_shortcut_sig(user_id, sig):
-            raise HTTPException(403, "Invalid or expired link")
-
-        # Try pre-signed first, fall back to unsigned generation
-        signed_path = os.path.join("data", "shortcuts", f"{user_id}.shortcut")
-        if os.path.exists(signed_path):
-            with open(signed_path, "rb") as f:
-                content = f.read()
-        else:
-            # Generate unsigned on-the-fly
-            from engine.shortcuts.generator import generate_shortcut
-            content = generate_shortcut(
-                user_id=user_id,
-                api_token=config.api_token,
-            )
-
-        from fastapi.responses import Response
-        return Response(
-            content=content,
-            media_type="application/octet-stream",
-            headers={
-                "Content-Disposition": f'attachment; filename="Baseline Health Sync.shortcut"',
-            },
-        )
-
     # Expose for use by MCP tools
     app.state.generate_auth_url = generate_auth_url
-    app.state.generate_shortcut_url = generate_shortcut_url
     app.state.config = config
 
     @app.get("/", response_class=HTMLResponse)
@@ -360,41 +307,6 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
   <p class="ok">Running on port {config.port}</p>
   <p>Auth gateway for wearable connections.<br>
   Use your health coach to get a connection link.</p>
-</div></body></html>"""
-
-    @app.get("/setup/shortcut-url", response_class=HTMLResponse)
-    async def shortcut_url_page():
-        """Page with the API URL for copy-pasting into iOS Shortcuts."""
-        url = f"https://auth.mybaseline.health/api/ingest_health_snapshot?token={config.api_token}&resting_hr=&hrv_sdnn=&steps=&weight_lbs=&vo2_max=&blood_oxygen=&active_calories=&respiratory_rate=&sleep_start=&sleep_end="
-        return f"""<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Shortcut Setup</title>
-<style>
-  body {{ font-family: system-ui, sans-serif; background: #09090b; color: #fafafa;
-         display: flex; align-items: center; justify-content: center; min-height: 100vh;
-         margin: 0; padding: 20px; }}
-  .card {{ background: #111113; border: 1px solid #27272a; border-radius: 16px;
-           padding: 32px; max-width: 500px; width: 100%; }}
-  h1 {{ font-size: 1.1rem; margin: 0 0 16px 0; }}
-  .url {{ background: #1a1a1e; border: 1px solid #333; border-radius: 8px;
-          padding: 14px; font-family: monospace; font-size: 0.75rem; word-break: break-all;
-          line-height: 1.5; margin-bottom: 16px; user-select: all; }}
-  button {{ background: #22c55e; color: #000; border: none; border-radius: 8px;
-            padding: 12px 24px; font-size: 1rem; font-weight: 600; cursor: pointer;
-            width: 100%; }}
-  button:active {{ background: #16a34a; }}
-  .hint {{ color: #71717a; font-size: 0.8rem; margin-top: 12px; text-align: center; }}
-  .copied {{ color: #22c55e; font-weight: 600; }}
-</style></head>
-<body><div class="card">
-  <h1>Install Baseline Health Sync</h1>
-  <a href="https://www.icloud.com/shortcuts/b0c11b2912c1434fad4a2d87f4d2a762" style="display:block;background:#22c55e;color:#000;border:none;border-radius:8px;padding:14px 24px;font-size:1rem;font-weight:600;text-align:center;text-decoration:none;margin-bottom:16px;">Add Shortcut</a>
-  <h1 style="margin-top:24px;">API URL (for manual setup)</h1>
-  <div class="url" id="url">{url}</div>
-  <button onclick="navigator.clipboard.writeText(document.getElementById('url').textContent);this.textContent='Copied!';this.classList.add('copied')">
-    Copy URL
-  </button>
-  <p class="hint">Tap Copy, then go back to Shortcuts and paste into the URL field.</p>
 </div></body></html>"""
 
     @app.get("/health")
