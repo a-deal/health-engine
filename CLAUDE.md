@@ -243,3 +243,7 @@ Source: mariozechner.at/posts/2026-03-25-thoughts-on-slowing-the-fuck-down/
 
 - tools.py uses lazy imports (`from engine.gateway.db import get_db` inside functions). To mock in tests, patch `engine.gateway.db.get_db`, not `mcp_server.tools.get_db`. (learned 2026-04-03)
 - Google Calendar OAuth scope is `calendar.events` (sensitive, free verification), not `calendar` (broad). Both gcal.py and server.py must match. (learned 2026-04-03)
+- Never embed time-sensitive tokens (HMAC, OTP) in async messages. WhatsApp messages sit for hours. Generate on-demand only, in response to user action. (learned 2026-04-05)
+- Silent skips are silent failures. Every scheduler skip path needs a WARNING log if it persists beyond a threshold. The zero-data gate silently skipped Mike for 3 days. (learned 2026-04-05)
+- Don't infer what you can ask. Timezone was never collected during onboarding, just defaulted to Pacific. Area codes don't correlate with location. Ask the user. (learned 2026-04-05)
+- /health/deep checks only work if the cron actually hits /health/deep. Verify the alert path end-to-end after adding new health checks. (learned 2026-04-05)
