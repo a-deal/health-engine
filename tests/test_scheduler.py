@@ -33,6 +33,14 @@ from engine.gateway.scheduler import (
 _NOW = "2026-04-02T00:00:00Z"
 
 
+@pytest.fixture(autouse=True)
+def mock_engagement_active():
+    """All scheduler tests assume active engagement unless testing engagement itself."""
+    with patch("engine.gateway.scheduler._engagement_state",
+               return_value={"state": "active", "last_reply_hours": 1, "messages_since_reply": 0}):
+        yield
+
+
 def _insert_person(db, id, name, user_id, channel=None, target=None, tz="America/Los_Angeles", deleted_at=None):
     """Insert a person with required NOT NULL fields."""
     db.execute(
@@ -233,7 +241,8 @@ class TestRunSchedule:
 
     @pytest.fixture(autouse=True)
     def mock_wearable_connected(self):
-        """Default: simulate connected wearable so tests don't get connect links appended."""
+        """Default: simulate connected wearable and active engagement so tests
+        don't get blocked by connect links or engagement gates."""
         from unittest.mock import MagicMock
         with patch("engine.gateway.scheduler._get_token_store") as mock_ts:
             ts = MagicMock()

@@ -213,7 +213,8 @@ class TestValidationInScheduler:
     @patch("engine.gateway.scheduler._user_local_now")
     @patch("engine.gateway.scheduler._get_eligible_persons")
     @patch("engine.gateway.scheduler._audit_scheduler")
-    def test_dry_run_message_annotated_on_source_change(self, mock_audit, mock_persons, mock_now, mock_context, mock_compose, db_with_andrew):
+    @patch("engine.gateway.scheduler._engagement_state", return_value={"state": "active", "last_reply_hours": 1, "messages_since_reply": 0})
+    def test_dry_run_message_annotated_on_source_change(self, mock_engagement, mock_audit, mock_persons, mock_now, mock_context, mock_compose, db_with_andrew):
         """When source changed and message mentions the metric, dry_run output includes disclaimer."""
         _insert_wearable(db_with_andrew, "andrew-001", _5D_AGO, "garmin", vo2_max=47.0)
         _insert_wearable(db_with_andrew, "andrew-001", _1D_AGO, "apple_health", vo2_max=32.3)
@@ -235,7 +236,8 @@ class TestValidationInScheduler:
     @patch("engine.gateway.scheduler._user_local_now")
     @patch("engine.gateway.scheduler._get_eligible_persons")
     @patch("engine.gateway.scheduler._audit_scheduler")
-    def test_no_annotation_when_metric_not_mentioned(self, mock_audit, mock_persons, mock_now, mock_context, mock_compose, db_with_andrew):
+    @patch("engine.gateway.scheduler._engagement_state", return_value={"state": "active", "last_reply_hours": 1, "messages_since_reply": 0})
+    def test_no_annotation_when_metric_not_mentioned(self, mock_engagement, mock_audit, mock_persons, mock_now, mock_context, mock_compose, db_with_andrew):
         """Source changed for VO2, but message doesn't mention it. No disclaimer."""
         _insert_wearable(db_with_andrew, "andrew-001", _5D_AGO, "garmin", vo2_max=47.0)
         _insert_wearable(db_with_andrew, "andrew-001", _1D_AGO, "apple_health", vo2_max=32.3)
@@ -256,7 +258,8 @@ class TestValidationInScheduler:
     @patch("engine.gateway.scheduler._user_local_now")
     @patch("engine.gateway.scheduler._get_eligible_persons")
     @patch("engine.gateway.scheduler._audit_scheduler")
-    def test_no_annotation_when_no_source_change(self, mock_audit, mock_persons, mock_now, mock_context, mock_compose, db_with_andrew):
+    @patch("engine.gateway.scheduler._engagement_state", return_value={"state": "active", "last_reply_hours": 1, "messages_since_reply": 0})
+    def test_no_annotation_when_no_source_change(self, mock_engagement, mock_audit, mock_persons, mock_now, mock_context, mock_compose, db_with_andrew):
         """Single source throughout. No disclaimer even though VO2 is mentioned."""
         for i in range(7):
             d = (_today - __import__("datetime").timedelta(days=i)).strftime("%Y-%m-%d")

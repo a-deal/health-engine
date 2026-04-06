@@ -507,6 +507,7 @@ class TestHypothesisWiring:
              patch("engine.gateway.scheduler._get_token_store") as mock_ts, \
              patch("engine.gateway.scheduler._user_local_now") as mock_now, \
              patch("engine.gateway.scheduler._get_eligible_persons") as mock_persons, \
+             patch("engine.gateway.scheduler._engagement_state", return_value={"state": "active", "last_reply_hours": 1, "messages_since_reply": 0}), \
              patch("engine.gateway.scheduler._audit_scheduler"):
 
             ts = MagicMock()
@@ -536,6 +537,7 @@ class TestHypothesisWiring:
              patch("engine.gateway.scheduler._gather_context", return_value={}), \
              patch("engine.gateway.scheduler._user_local_now") as mock_now, \
              patch("engine.gateway.scheduler._get_eligible_persons") as mock_persons, \
+             patch("engine.gateway.scheduler._engagement_state", return_value={"state": "active", "last_reply_hours": 1, "messages_since_reply": 0}), \
              patch("engine.gateway.scheduler._audit_scheduler"):
 
             mock_persons.return_value = [

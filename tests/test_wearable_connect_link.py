@@ -136,7 +136,8 @@ class TestSchedulerWearableLinkIntegration:
     @patch("engine.gateway.scheduler._user_local_now")
     @patch("engine.gateway.scheduler._get_eligible_persons")
     @patch("engine.gateway.scheduler._audit_scheduler")
-    def test_dry_run_includes_nudge_not_link(self, mock_audit, mock_persons, mock_now, mock_context, mock_compose, db_with_mike):
+    @patch("engine.gateway.scheduler._engagement_state", return_value={"state": "active", "last_reply_hours": 1, "messages_since_reply": 0})
+    def test_dry_run_includes_nudge_not_link(self, mock_engagement, mock_audit, mock_persons, mock_now, mock_context, mock_compose, db_with_mike):
         """Scheduled message for user without wearable should include text nudge, not HMAC link."""
         mock_persons.return_value = [
             {"id": "mike-001", "name": "Mike", "health_engine_user_id": "mike",
@@ -161,7 +162,8 @@ class TestSchedulerWearableLinkIntegration:
     @patch("engine.gateway.scheduler._user_local_now")
     @patch("engine.gateway.scheduler._get_eligible_persons")
     @patch("engine.gateway.scheduler._audit_scheduler")
-    def test_dry_run_no_link_when_connected(self, mock_audit, mock_persons, mock_now, mock_context, mock_compose, db_with_mike):
+    @patch("engine.gateway.scheduler._engagement_state", return_value={"state": "active", "last_reply_hours": 1, "messages_since_reply": 0})
+    def test_dry_run_no_link_when_connected(self, mock_engagement, mock_audit, mock_persons, mock_now, mock_context, mock_compose, db_with_mike):
         """Scheduled message for connected user should NOT include connect link."""
         mock_persons.return_value = [
             {"id": "mike-001", "name": "Mike", "health_engine_user_id": "mike",

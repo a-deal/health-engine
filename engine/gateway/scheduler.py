@@ -86,6 +86,76 @@ def _in_quiet_hours(local_now: datetime) -> bool:
     return minutes >= 21 * 60 + 15 or minutes < 6 * 60
 
 
+# --- Engagement state ---
+
+# Thresholds (hours)
+_ACTIVE_THRESHOLD = 48
+_DRIFTING_THRESHOLD = 120   # 5 days
+_COLD_THRESHOLD = 336       # 14 days
+
+
+def _engagement_state(db, user_id: str) -> dict:
+    """Determine engagement state from conversation history.
+
+    Returns:
+        {"state": "active|drifting|cold|gone",
+         "last_reply_hours": float | None,
+         "messages_since_reply": int}
+    """
+    # Last user reply
+    row = db.execute(
+        "SELECT MAX(timestamp) as last_reply FROM conversation_message "
+        "WHERE user_id = ? AND role = 'user'",
+        (user_id,),
+    ).fetchone()
+
+    last_reply_ts = row["last_reply"] if row else None
+
+    if not last_reply_ts:
+        # Never replied
+        outbound = db.execute(
+            "SELECT COUNT(*) as cnt FROM conversation_message "
+            "WHERE user_id = ? AND role = 'assistant'",
+            (user_id,),
+        ).fetchone()
+        return {
+            "state": "gone",
+            "last_reply_hours": None,
+            "messages_since_reply": outbound["cnt"] if outbound else 0,
+        }
+
+    # Calculate hours since last reply
+    try:
+        last_dt = datetime.fromisoformat(last_reply_ts.replace("Z", "+00:00"))
+        hours_ago = (datetime.now(last_dt.tzinfo or None) - last_dt).total_seconds() / 3600
+    except (ValueError, TypeError):
+        return {"state": "gone", "last_reply_hours": None, "messages_since_reply": 0}
+
+    # Count outbound messages since last reply
+    outbound = db.execute(
+        "SELECT COUNT(*) as cnt FROM conversation_message "
+        "WHERE user_id = ? AND role = 'assistant' AND timestamp > ?",
+        (user_id, last_reply_ts),
+    ).fetchone()
+    messages_since = outbound["cnt"] if outbound else 0
+
+    # Bucket into state
+    if hours_ago < _ACTIVE_THRESHOLD:
+        state = "active"
+    elif hours_ago < _DRIFTING_THRESHOLD:
+        state = "drifting"
+    elif hours_ago < _COLD_THRESHOLD:
+        state = "cold"
+    else:
+        state = "gone"
+
+    return {
+        "state": state,
+        "last_reply_hours": round(hours_ago, 1),
+        "messages_since_reply": messages_since,
+    }
+
+
 # --- Dedup ---
 
 
@@ -485,6 +555,20 @@ def _run_schedule(schedule_type: str, target_hour: int, require_friday: bool = F
             # Check quiet hours
             if _in_quiet_hours(local_now):
                 results.append({"user_id": user_id, "status": "skip", "reason": "quiet hours"})
+                continue
+
+        # Engagement gate: back off when users stop replying
+        if not is_forced:
+            eng = _engagement_state(db, user_id)
+            eng_state = eng["state"]
+            if eng_state == "gone":
+                results.append({"user_id": user_id, "status": "skip", "reason": f"gone ({eng['last_reply_hours']}h silent, {eng['messages_since_reply']} unreplied)"})
+                continue
+            if eng_state == "cold":
+                results.append({"user_id": user_id, "status": "skip", "reason": f"cold ({eng['last_reply_hours']}h silent, {eng['messages_since_reply']} unreplied)"})
+                continue
+            if eng_state == "drifting" and schedule_type == "evening_checkin":
+                results.append({"user_id": user_id, "status": "skip", "reason": f"drifting - morning only ({eng['last_reply_hours']}h silent)"})
                 continue
 
         # Dedup check

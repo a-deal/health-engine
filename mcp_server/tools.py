@@ -2268,61 +2268,29 @@ def _setup_profile(
 
 
 def _check_engagement(user_id: str | None = None) -> dict:
-    if not user_id:
-        return {"error": "user_id is required."}
-    data_dir = _data_dir(user_id)
-    nudge_path = data_dir / "nudge_state.json"
+    """Check engagement state for a user or all users.
 
-    has_data = any(
-        (data_dir / f).exists()
-        for f in ["config.yaml", "weight_log.csv", "meal_log.csv",
-                   "daily_habits.csv", "garmin_latest.json", "lab_results.json"]
-    )
+    Returns state (active/drifting/cold/gone), last reply time, and
+    outbound messages since last reply. The scheduler uses the same
+    function to gate send frequency.
+    """
+    from engine.gateway.db import get_db
+    from engine.gateway.scheduler import _engagement_state
 
-    if nudge_path.exists():
-        with open(nudge_path) as f:
-            state = json.load(f)
-    else:
-        state = {
-            "onboarded_at": datetime.now().strftime("%Y-%m-%d"),
-            "nudges_sent": [],
-            "responded": False,
-            "dormant": False,
-        }
+    conn = get_db()
 
-    if has_data:
-        state["responded"] = True
-        _atomic_json_write(nudge_path, state, indent=2)
-        return {"status": "engaged", "user_id": user_id, "state": state}
+    if user_id == "all" or not user_id:
+        rows = conn.execute(
+            "SELECT DISTINCT health_engine_user_id FROM person "
+            "WHERE deleted_at IS NULL AND health_engine_user_id IS NOT NULL",
+        ).fetchall()
+        results = {}
+        for row in rows:
+            uid = row["health_engine_user_id"]
+            results[uid] = _engagement_state(conn, uid)
+        return {"users": results}
 
-    if state.get("dormant"):
-        return {"status": "dormant", "user_id": user_id, "state": state,
-                "action": "none", "reason": "User marked dormant after Day 7 nudge."}
-
-    onboarded = datetime.strptime(state["onboarded_at"], "%Y-%m-%d")
-    days_since = (datetime.now() - onboarded).days
-    nudges = state.get("nudges_sent", [])
-
-    if days_since >= 1 and "day1" not in nudges:
-        action = "send_day1_nudge"
-    elif days_since >= 3 and "day3" not in nudges:
-        action = "remind_andrew_day3"
-    elif days_since >= 7 and "day7" not in nudges:
-        action = "send_day7_nudge"
-    elif days_since > 7:
-        state["dormant"] = True
-        _atomic_json_write(nudge_path, state, indent=2)
-        action = "none"
-    else:
-        action = "wait"
-
-    return {
-        "status": "unresponsive",
-        "user_id": user_id,
-        "days_since_onboarding": days_since,
-        "state": state,
-        "action": action,
-    }
+    return _engagement_state(conn, user_id)
 
 
 def _send_message(user_id: str, message: str) -> dict:
@@ -4102,9 +4070,9 @@ def register_tools(mcp: FastMCP):
 
     @mcp.tool()
     def check_engagement(user_id: str | None = None) -> dict:
-        """Check if a user has engaged after onboarding. Returns engagement status,
-        days since onboarding, nudge history, and recommended next action.
-        Used by the follow-up nudge system to decide what to send."""
+        """Check engagement state for a user. Returns state (active/drifting/cold/gone), hours since last reply, and outbound messages since last reply. The scheduler uses this to back off when users stop replying. Pass user_id="all" for all users."""
+        if user_id == "all":
+            return _check_engagement("all")
         return _check_engagement(_effective_user_id(user_id))
 
     @mcp.tool()

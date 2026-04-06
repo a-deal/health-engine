@@ -103,8 +103,10 @@ class TestSchedulerHappyPath:
            return_value="Sleep was 7.2 hours last night. HRV at 58, solid recovery.")
     @patch("engine.gateway.scheduler._user_local_now")
     @patch("engine.gateway.scheduler._audit_scheduler")
+    @patch("engine.gateway.scheduler._engagement_state",
+           return_value={"state": "active", "last_reply_hours": 1, "messages_since_reply": 0})
     def test_full_morning_brief_dry_run(
-        self, mock_audit, mock_now, mock_compose, mock_send, e2e_env,
+        self, mock_engagement, mock_audit, mock_now, mock_compose, mock_send, e2e_env,
     ):
         from engine.gateway.scheduler import _run_schedule
 

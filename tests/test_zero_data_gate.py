@@ -106,7 +106,9 @@ class TestZeroDataSchedulerIntegration:
     @pytest.fixture(autouse=True)
     def mock_wearable_disconnected(self):
         from unittest.mock import MagicMock
-        with patch("engine.gateway.scheduler._get_token_store") as mock_ts:
+        with patch("engine.gateway.scheduler._get_token_store") as mock_ts, \
+             patch("engine.gateway.scheduler._engagement_state",
+                   return_value={"state": "active", "last_reply_hours": 1, "messages_since_reply": 0}):
             ts = MagicMock()
             ts.has_token.return_value = False
             mock_ts.return_value = ts
