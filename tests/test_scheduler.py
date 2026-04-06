@@ -992,3 +992,57 @@ class TestNullTimezone:
 
         assert result["results"][0]["status"] == "skip"
         assert "no timezone" in result["results"][0]["reason"]
+
+
+class TestOutboundGateInScheduler:
+    """Scheduler should run outbound gate on composed messages before sending."""
+
+    @pytest.fixture(autouse=True)
+    def mock_wearable_connected(self):
+        with patch("engine.gateway.scheduler._get_token_store") as mock_ts:
+            ts = MagicMock()
+            ts.has_token.return_value = True
+            mock_ts.return_value = ts
+            yield mock_ts
+
+    @patch("engine.gateway.scheduler._compose_message", return_value='Your data: {"user_id": "mike", "sleep_hrs": 6.2}')
+    @patch("engine.gateway.scheduler._gather_context", return_value={"checkin": {"data_available": {"garmin": True}, "score": {"coverage": 6}}})
+    @patch("engine.gateway.scheduler._user_local_now")
+    @patch("engine.gateway.scheduler._get_eligible_persons")
+    @patch("engine.gateway.scheduler._audit_scheduler")
+    def test_json_in_message_gets_flagged(self, mock_audit, mock_persons, mock_now, mock_context, mock_compose, db_with_andrew, caplog):
+        """If Sonnet leaks JSON into a message, outbound gate should flag it."""
+        mock_persons.return_value = [
+            {"id": "andrew-001", "name": "Andrew", "health_engine_user_id": "andrew",
+             "channel": "whatsapp", "channel_target": "+14152009584",
+             "timezone": "America/Los_Angeles", "created_at": "2026-03-24"},
+        ]
+        mock_now.return_value = datetime(2026, 4, 5, 7, 10, tzinfo=ZoneInfo("America/Los_Angeles"))
+
+        import logging
+        with caplog.at_level(logging.WARNING, logger="kiso.scheduler"):
+            result = _run_schedule("morning_brief", target_hour=7, dry_run=True)
+
+        assert result["results"][0]["status"] == "dry_run"
+        assert any("outbound_gate" in r.message for r in caplog.records)
+
+    @patch("engine.gateway.scheduler._compose_message", return_value="Sleep was 7.1 hours last night. HRV trending up at 62.")
+    @patch("engine.gateway.scheduler._gather_context", return_value={"checkin": {"data_available": {"garmin": True}, "score": {"coverage": 6}}})
+    @patch("engine.gateway.scheduler._user_local_now")
+    @patch("engine.gateway.scheduler._get_eligible_persons")
+    @patch("engine.gateway.scheduler._audit_scheduler")
+    def test_clean_message_no_warning(self, mock_audit, mock_persons, mock_now, mock_context, mock_compose, db_with_andrew, caplog):
+        """Clean coaching message should pass outbound gate with no warnings."""
+        mock_persons.return_value = [
+            {"id": "andrew-001", "name": "Andrew", "health_engine_user_id": "andrew",
+             "channel": "whatsapp", "channel_target": "+14152009584",
+             "timezone": "America/Los_Angeles", "created_at": "2026-03-24"},
+        ]
+        mock_now.return_value = datetime(2026, 4, 5, 7, 10, tzinfo=ZoneInfo("America/Los_Angeles"))
+
+        import logging
+        with caplog.at_level(logging.WARNING, logger="kiso.scheduler"):
+            result = _run_schedule("morning_brief", target_hour=7, dry_run=True)
+
+        assert result["results"][0]["status"] == "dry_run"
+        assert not any("outbound_gate" in r.message for r in caplog.records)

@@ -565,6 +565,18 @@ def _run_schedule(schedule_type: str, target_hour: int, require_friday: bool = F
                 results.append({"user_id": user_id, "status": "error", "reason": f"compose failed: {e}"})
                 continue
 
+        # Outbound gate: check for system internals leaking into coaching messages
+        try:
+            from engine.gateway.outbound_gate import validate_outbound
+            gate_result = validate_outbound(message)
+            if not gate_result.ok:
+                logger.warning(
+                    "outbound_gate flagged user_id=%s flags=%s details=%s",
+                    user_id, gate_result.flags, gate_result.details,
+                )
+        except Exception as e:
+            logger.warning("Outbound gate check failed for %s: %s", user_id, e)
+
         # Pre-send validation: flag metrics whose source changed recently
         try:
             claim_warnings = validate_coaching_claims(message, person_id, db)

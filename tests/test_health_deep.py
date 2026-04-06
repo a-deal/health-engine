@@ -155,3 +155,66 @@ class TestHealthDeepSourceChanges:
         """health/deep should not crash when there are no users with wearable data."""
         resp = health_client.get("/health/deep")
         assert resp.status_code == 200
+
+
+class TestStuckUserDetection:
+    """health/deep should flag users who have been in the system >48h with no data."""
+
+    def test_stuck_user_flagged(self, db_path, health_client):
+        """User created 3 days ago with zero wearable data should be flagged as stuck."""
+        db = get_db(db_path)
+        three_days_ago = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+        db.execute(
+            "INSERT INTO person (id, name, health_engine_user_id, channel, channel_target, timezone, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("p-stuck", "StuckUser", "stuck", "whatsapp", "+15551234567", "America/Los_Angeles", three_days_ago, three_days_ago),
+        )
+        db.commit()
+
+        resp = health_client.get("/health/deep")
+        data = resp.json()
+        assert "stuck_users" in data["checks"], \
+            f"Missing stuck_users check. Keys: {list(data['checks'].keys())}"
+        assert "stuck" in data["checks"]["stuck_users"]
+        assert data["checks"]["stuck_users"]["stuck"]["status"] == "stuck"
+        assert data["checks"]["stuck_users"]["stuck"]["days"] >= 2
+
+    def test_new_user_not_flagged(self, db_path, health_client):
+        """User created 1 hour ago should not be flagged."""
+        db = get_db(db_path)
+        one_hour_ago = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        db.execute(
+            "INSERT INTO person (id, name, health_engine_user_id, channel, channel_target, timezone, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("p-new", "NewUser", "newbie", "whatsapp", "+15559876543", "America/Los_Angeles", one_hour_ago, one_hour_ago),
+        )
+        db.commit()
+
+        resp = health_client.get("/health/deep")
+        data = resp.json()
+        stuck = data["checks"].get("stuck_users", {})
+        assert "newbie" not in stuck
+
+    def test_active_user_not_flagged(self, db_path, health_client):
+        """User created 5 days ago WITH wearable data should not be flagged."""
+        import uuid
+        db = get_db(db_path)
+        five_days_ago = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
+        db.execute(
+            "INSERT INTO person (id, name, health_engine_user_id, channel, channel_target, timezone, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("p-active", "ActiveUser", "active", "whatsapp", "+15550001111", "America/Los_Angeles", five_days_ago, five_days_ago),
+        )
+        yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+        rid = str(uuid.uuid4())
+        db.execute(
+            "INSERT INTO wearable_daily (id, person_id, date, source, rhr, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (rid, "p-active", yesterday, "garmin", 62, five_days_ago, five_days_ago),
+        )
+        db.commit()
+
+        resp = health_client.get("/health/deep")
+        data = resp.json()
+        stuck = data["checks"].get("stuck_users", {})
+        assert "active" not in stuck

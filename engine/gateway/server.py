@@ -526,7 +526,36 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
         except Exception as e:
             checks["wearable_source_changes"] = {"status": "error", "error": str(e)[:100]}
 
-        # 9. Disk space
+        # 9. Stuck users: created >48h ago with no wearable data
+        try:
+            from .db import get_db as _get_db4
+            _sudb = _get_db4()
+            _su_cutoff = (datetime.utcnow() - __import__("datetime").timedelta(hours=48)).isoformat()
+            _su_persons = _sudb.execute(
+                "SELECT p.health_engine_user_id, p.created_at "
+                "FROM person p "
+                "WHERE p.deleted_at IS NULL AND p.health_engine_user_id IS NOT NULL "
+                "AND p.channel IS NOT NULL AND p.created_at < ? "
+                "AND NOT EXISTS ("
+                "  SELECT 1 FROM wearable_daily wd WHERE wd.person_id = p.id"
+                ")",
+                (_su_cutoff,),
+            ).fetchall()
+            stuck_report = {}
+            for sp in _su_persons:
+                uid = sp["health_engine_user_id"]
+                try:
+                    ca = datetime.fromisoformat(sp["created_at"].replace("Z", "+00:00"))
+                    days = (datetime.utcnow() - ca.replace(tzinfo=None)).days
+                except Exception:
+                    days = -1
+                stuck_report[uid] = {"status": "stuck", "days": days}
+            if stuck_report:
+                checks["stuck_users"] = stuck_report
+        except Exception as e:
+            checks["stuck_users"] = {"status": "error", "error": str(e)[:100]}
+
+        # 10. Disk space
         import shutil
         usage = shutil.disk_usage(str(Path.home()))
         pct_used = round(100 * (usage.used / usage.total), 1)
