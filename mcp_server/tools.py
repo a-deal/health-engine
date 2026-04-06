@@ -2188,6 +2188,7 @@ def _setup_profile(
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 
     # Persist unit_system and/or timezone to person table in SQLite
+    _ALLOWED_PERSON_COLUMNS = {"unit_system", "timezone"}
     updates = {}
     if unit_system is not None:
         updates["unit_system"] = unit_system
@@ -2195,6 +2196,7 @@ def _setup_profile(
         updates["timezone"] = timezone
 
     if updates:
+        assert set(updates.keys()) <= _ALLOWED_PERSON_COLUMNS, f"Invalid columns: {set(updates.keys()) - _ALLOWED_PERSON_COLUMNS}"
         person_id = _resolve_person_id(user_id)
         if person_id:
             from engine.gateway.db import get_db, init_db

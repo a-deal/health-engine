@@ -86,6 +86,7 @@ class PersonOut(CamelModel):
     family_history_json: str | None = None
     health_notes: str | None = None
     health_engine_user_id: str | None = None
+    timezone: str | None = None
     created_at: str
     updated_at: str
     deleted_at: str | None = None

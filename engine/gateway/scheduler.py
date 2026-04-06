@@ -256,8 +256,6 @@ def append_wearable_connect_link(
     message: str,
     user_id: str,
     token_store=None,
-    base_url: str = "",
-    hmac_secret: str = "",
 ) -> str:
     """Append a text nudge if the user has no wearable tokens.
 
@@ -499,7 +497,12 @@ def _run_schedule(schedule_type: str, target_hour: int, require_friday: bool = F
         context_data = _gather_context(schedule_type, user_id)
 
         # Zero-data users: nudge if new (<7 days), warn if stuck (>7 days)
+        # Only nudge during morning_brief to avoid double-sending
         if not has_composable_data(context_data):
+            if schedule_type != "morning_brief":
+                results.append({"user_id": user_id, "status": "skip", "reason": "no data, nudge only at morning"})
+                continue
+
             created_at_str = person.get("created_at", "")
             try:
                 created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))

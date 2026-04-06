@@ -70,11 +70,7 @@ class TestAppendWearableConnectLink:
         mock_ts = MagicMock()
         mock_ts.has_token.side_effect = lambda svc, uid: svc == "garmin"
 
-        result = append_wearable_connect_link(
-            message, "mike", mock_ts,
-            base_url="https://auth.mybaseline.health",
-            hmac_secret="test-secret",
-        )
+        result = append_wearable_connect_link(message, "mike", mock_ts)
         assert result == message  # unchanged
 
     def test_no_append_when_oura_connected(self, db_with_mike):
@@ -83,11 +79,7 @@ class TestAppendWearableConnectLink:
         mock_ts = MagicMock()
         mock_ts.has_token.side_effect = lambda svc, uid: svc == "oura"
 
-        result = append_wearable_connect_link(
-            message, "mike", mock_ts,
-            base_url="https://auth.mybaseline.health",
-            hmac_secret="test-secret",
-        )
+        result = append_wearable_connect_link(message, "mike", mock_ts)
         assert result == message
 
     def test_no_hmac_link_in_nudge(self, db_with_mike):
@@ -96,9 +88,7 @@ class TestAppendWearableConnectLink:
         mock_ts = MagicMock()
         mock_ts.has_token.return_value = False
 
-        result = append_wearable_connect_link(
-            message, "mike", mock_ts,
-        )
+        result = append_wearable_connect_link(message, "mike", mock_ts)
         assert "state=" not in result
         assert "auth.mybaseline.health" not in result
         assert "http" not in result.split(message)[1]  # nothing after message is a URL
@@ -109,11 +99,7 @@ class TestAppendWearableConnectLink:
         mock_ts = MagicMock()
         mock_ts.has_token.side_effect = Exception("DB error")
 
-        result = append_wearable_connect_link(
-            message, "mike", mock_ts,
-            base_url="https://auth.mybaseline.health",
-            hmac_secret="test-secret",
-        )
+        result = append_wearable_connect_link(message, "mike", mock_ts)
         assert result == message
 
 

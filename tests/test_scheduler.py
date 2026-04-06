@@ -916,6 +916,48 @@ class TestOnboardingNudge:
         assert r["status"] == "skip"
         assert any("stuck" in rec.message or "zero_data" in rec.message for rec in caplog.records)
 
+    @patch("engine.gateway.scheduler._gather_context", return_value={"checkin": {"data_available": {}, "score": {"coverage": 0}}})
+    @patch("engine.gateway.scheduler._user_local_now")
+    @patch("engine.gateway.scheduler._get_eligible_persons")
+    @patch("engine.gateway.scheduler._audit_scheduler")
+    def test_malformed_created_at_treated_as_old(self, mock_audit, mock_persons, mock_now, mock_context, db_with_andrew, caplog):
+        """Unparseable created_at should not crash, should skip with warning like >7 day user."""
+        mock_persons.return_value = [
+            {"id": "mike-001", "name": "Mike", "health_engine_user_id": "mike",
+             "channel": "whatsapp", "channel_target": "+14155551234",
+             "timezone": "America/Los_Angeles", "created_at": "garbage"},
+        ]
+        mock_now.return_value = datetime(2026, 4, 5, 7, 10, tzinfo=ZoneInfo("America/Los_Angeles"))
+
+        import logging
+        with caplog.at_level(logging.WARNING, logger="kiso.scheduler"):
+            result = _run_schedule("morning_brief", target_hour=7, dry_run=True)
+
+        r = result["results"][0]
+        assert r["status"] == "skip"
+        assert "stuck" in r.get("reason", "") or "no data" in r.get("reason", "")
+
+    @patch("engine.gateway.scheduler._gather_context", return_value={"checkin": {"data_available": {}, "score": {"coverage": 0}}})
+    @patch("engine.gateway.scheduler._user_local_now")
+    @patch("engine.gateway.scheduler._get_eligible_persons")
+    @patch("engine.gateway.scheduler._audit_scheduler")
+    def test_evening_checkin_skips_zero_data_user(self, mock_audit, mock_persons, mock_now, mock_context, db_with_andrew):
+        """Onboarding nudges only fire during morning_brief, not evening_checkin."""
+        from datetime import timedelta
+        two_days_ago = (datetime.now() - timedelta(days=2)).isoformat()
+        mock_persons.return_value = [
+            {"id": "mike-001", "name": "Mike", "health_engine_user_id": "mike",
+             "channel": "whatsapp", "channel_target": "+14155551234",
+             "timezone": "America/Los_Angeles", "created_at": two_days_ago},
+        ]
+        mock_now.return_value = datetime(2026, 4, 5, 20, 10, tzinfo=ZoneInfo("America/Los_Angeles"))
+
+        result = _run_schedule("evening_checkin", target_hour=20, dry_run=True)
+
+        r = result["results"][0]
+        assert r["status"] == "skip"
+        assert "nudge only at morning" in r["reason"]
+
 
 class TestNullTimezone:
     """Scheduler should skip users with NULL timezone and log a warning."""
