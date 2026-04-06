@@ -106,3 +106,61 @@ class TestAllUsersQuery:
         # All test data is "now", so hours=1 should return everything
         result = _get_conversations(hours=1)
         assert result["total_messages"] == 3
+
+
+class TestAllUsersSentinel:
+    """The MCP wrapper uses user_id='all' to bypass middleware injection."""
+
+    def test_all_sentinel_returns_all_users(self, conv_db):
+        # _get_conversations(None) is the underlying call; the MCP wrapper
+        # translates "all" → None before calling it.
+        result = _get_conversations(user_id=None, hours=24)
+        assert "andrew" in result["users"]
+        assert "paul" in result["users"]
+
+
+class TestNullUserIdFiltering:
+    """Messages with NULL user_id (cron sessions, backfill artifacts) must not
+    appear in conversations returned to the coaching agent."""
+
+    def test_null_user_id_excluded_from_all_users_query(self, conv_db):
+        """When querying all users, NULL user_id rows are invisible."""
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        conv_db.execute(
+            "INSERT INTO conversation_message "
+            "(user_id, role, content, sender_name, channel, session_key, timestamp, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (None, "assistant", "K journal entry about systems thinking", "k", "cron", "cron:k", now, now),
+        )
+        conv_db.execute(
+            "INSERT INTO conversation_message "
+            "(user_id, role, content, sender_name, channel, session_key, timestamp, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (None, "assistant", "Research scanner found 3 new papers", "scanner", "cron", "cron:scanner", now, now),
+        )
+        conv_db.commit()
+
+        result = _get_conversations(hours=24)
+        # Only andrew (2 real) + paul (1 real) = 3. No NULL user_id rows.
+        assert result["total_messages"] == 3
+        assert "unknown" not in result["users"]
+        all_contents = []
+        for user_msgs in result["conversations"].values():
+            all_contents.extend(m["content"] for m in user_msgs)
+        assert "K journal entry about systems thinking" not in all_contents
+        assert "Research scanner found 3 new papers" not in all_contents
+
+    def test_null_user_id_excluded_from_specific_user_query(self, conv_db):
+        """NULL user_id rows don't leak into a specific user's conversation."""
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        conv_db.execute(
+            "INSERT INTO conversation_message "
+            "(user_id, role, content, sender_name, channel, session_key, timestamp, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (None, "assistant", "Grigoriy delivery failed", "milo", "telegram", "cron:delivery", now, now),
+        )
+        conv_db.commit()
+
+        result = _get_conversations(user_id="andrew", hours=24)
+        all_contents = [m["content"] for m in result["conversations"].get("andrew", [])]
+        assert "Grigoriy delivery failed" not in all_contents

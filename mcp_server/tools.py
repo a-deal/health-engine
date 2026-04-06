@@ -3586,6 +3586,8 @@ def _get_conversations(
     # Exclude cron status codes that pollute coaching context (220 of 1,539 messages on Apr 5).
     # Data stays in DB for debugging; coaching agent never sees it.
     cron_filter = "AND content NOT IN ('HEARTBEAT_OK', 'NO_REPLY')"
+    # Exclude messages with NULL user_id (cron sessions, backfill artifacts, unresolved senders).
+    null_filter = "AND user_id IS NOT NULL"
     if user_id:
         rows = conn.execute(
             f"""SELECT user_id, role, content, sender_name, channel,
@@ -3594,6 +3596,7 @@ def _get_conversations(
                WHERE user_id = ? AND timestamp >= datetime('now', ?)
                {voice_filter}
                {cron_filter}
+               {null_filter}
                ORDER BY timestamp""",
             (user_id, f"-{hours} hours"),
         ).fetchall()
@@ -3605,6 +3608,7 @@ def _get_conversations(
                WHERE timestamp >= datetime('now', ?)
                {voice_filter}
                {cron_filter}
+               {null_filter}
                ORDER BY user_id, timestamp""",
             (f"-{hours} hours",),
         ).fetchall()
@@ -4241,10 +4245,12 @@ def register_tools(mcp: FastMCP):
 
     @mcp.tool()
     def get_conversations(user_id: str | None = None, hours: int = 168) -> dict:
-        """Get recent conversation history for a user. Returns all messages (user + assistant) from the last N hours (default 168 = 7 days). Call this at the start of a session to understand what you have already discussed with this user. If user_id is omitted, returns conversations for all users."""
-        # Don't resolve None → authenticated user here; None means "all users"
-        uid = _effective_user_id(user_id) if user_id else None
-        return _get_conversations(uid, hours)
+        """Get recent conversation history for a user. Returns all messages (user + assistant) from the last N hours (default 168 = 7 days). Call this at the start of a session to understand what you have already discussed with this user. Pass user_id="all" to return conversations for all users."""
+        # MCPAuthMiddleware injects authenticated user_id when None,
+        # so "all" is the explicit sentinel for cross-user queries.
+        if user_id == "all":
+            return _get_conversations(None, hours)
+        return _get_conversations(_effective_user_id(user_id), hours)
 
     @mcp.tool()
     def record_hypothesis(hypothesis: str, metric_key: str, user_id: str | None = None) -> dict:
