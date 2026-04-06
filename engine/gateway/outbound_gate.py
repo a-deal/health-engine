@@ -113,10 +113,7 @@ _INTERNAL_TERMS = [
     ("stuck 7 days", False),
     # Agent process narration (leaked 10+ times on April 5)
     ("human judgment needed", False),
-    ("delivered to andrew", False),
-    ("delivered to paul", False),
-    ("delivered to mike", False),
-    ("delivered to grigoriy", False),
+    ("delivered to", False),
     ("reading from disk", False),
     ("logging the rest in parallel", False),
     ("all on disk", False),
