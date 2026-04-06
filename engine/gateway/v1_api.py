@@ -507,6 +507,13 @@ def sync_ios(body: IosSyncRequest, request: Request, _token: str = Depends(_veri
         columns = TABLE_COLUMNS.get(table, [])
 
         for dto in dtos:
+            # Skip entities that don't belong to the authenticated person.
+            # Prevents multi-person CoreData stores from creating orphan rows.
+            if table == "person" and dto.id != body.person_id:
+                continue
+            if table != "person" and hasattr(dto, "person_id") and dto.person_id and dto.person_id != body.person_id:
+                continue
+
             data = to_data(dto)
             row_id = dto.id
 

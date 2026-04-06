@@ -396,6 +396,109 @@ class TestSync:
         assert len(checkins) == 1
 
 
+# --- iOS Sync entity filtering ---
+
+class TestIosSyncEntityFilter:
+    """The /sync/ios endpoint must skip entities that don't belong to the
+    authenticated person_id.  Without this, a multi-person CoreData store
+    pushes orphan person/habit/focus_plan rows into the server."""
+
+    def _create_person(self, client, pid, name="Test"):
+        client.post("/api/v1/persons", params=_auth(),
+                     json={"id": pid, "name": name})
+
+    def test_ios_sync_skips_mismatched_person_dto(self, client):
+        """Person DTOs whose id != request person_id must not be upserted."""
+        self._create_person(client, "owner-1", "Owner")
+
+        resp = client.post(
+            "/api/v1/sync/ios", params=_auth(),
+            json={
+                "person_id": "owner-1",
+                "last_sync": None,
+                "changes": {
+                    "persons": [
+                        {"id": "owner-1", "name": "Owner Updated"},
+                        {"id": "orphan-person", "name": "Orphan"},
+                    ],
+                    "habits": [], "check_ins": [],
+                    "focus_plans": [], "messages": [],
+                },
+            },
+        )
+        assert resp.status_code == 200
+
+        # Owner should be updated
+        owner = client.get("/api/v1/persons/owner-1", params=_auth())
+        assert owner.status_code == 200
+        assert owner.json()["name"] == "Owner Updated"
+
+        # Orphan should NOT exist
+        orphan = client.get("/api/v1/persons/orphan-person", params=_auth())
+        assert orphan.status_code == 404
+
+    def test_ios_sync_skips_mismatched_habit_dto(self, client):
+        """Habit DTOs whose person_id != request person_id must not be upserted."""
+        self._create_person(client, "owner-2", "Owner")
+
+        resp = client.post(
+            "/api/v1/sync/ios", params=_auth(),
+            json={
+                "person_id": "owner-2",
+                "last_sync": None,
+                "changes": {
+                    "persons": [],
+                    "habits": [
+                        {"id": "h-owned", "person_id": "owner-2", "title": "My Habit"},
+                        {"id": "h-orphan", "person_id": "other-person", "title": "Orphan Habit"},
+                    ],
+                    "check_ins": [], "focus_plans": [], "messages": [],
+                },
+            },
+        )
+        assert resp.status_code == 200
+
+        habits = client.get("/api/v1/persons/owner-2/habits", params=_auth()).json()
+        assert len(habits) == 1
+        assert habits[0]["title"] == "My Habit"
+
+    def test_ios_sync_skips_mismatched_focus_plan_dto(self, client):
+        """Focus plan DTOs whose person_id != request person_id must not be upserted."""
+        self._create_person(client, "owner-3", "Owner")
+
+        resp = client.post(
+            "/api/v1/sync/ios", params=_auth(),
+            json={
+                "person_id": "owner-3",
+                "last_sync": None,
+                "changes": {
+                    "persons": [],
+                    "habits": [],
+                    "check_ins": [],
+                    "focus_plans": [
+                        {"id": "fp-owned", "person_id": "owner-3", "primary_action": "Sleep more"},
+                        {"id": "fp-orphan", "person_id": "other-person", "primary_action": "Orphan Plan"},
+                    ],
+                    "messages": [],
+                },
+            },
+        )
+        assert resp.status_code == 200
+
+        # Only the owned plan should exist
+        db = get_db()
+        plans = db.execute(
+            "SELECT id FROM focus_plan WHERE person_id = ?", ("owner-3",)
+        ).fetchall()
+        assert len(plans) == 1
+        assert plans[0]["id"] == "fp-owned"
+
+        orphan = db.execute(
+            "SELECT id FROM focus_plan WHERE id = ?", ("fp-orphan",)
+        ).fetchone()
+        assert orphan is None
+
+
 # --- Context endpoint ---
 
 class TestPersonContext:
