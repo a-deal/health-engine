@@ -16,10 +16,11 @@ import uuid
 from datetime import datetime
 
 import anthropic
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from engine.coaching.habit_catalogue import HABITS
 from engine.gateway.db import get_db, init_db
+from engine.gateway.v1_api import _verify_token
 
 router = APIRouter(prefix="/api/v1", tags=["focus-plan"])
 
@@ -119,12 +120,11 @@ def _build_catalogue_json() -> str:
 
 
 @router.post("/generate-focus-plan")
-async def generate_focus_plan(request: Request):
+async def generate_focus_plan(request: Request, _token: str = Depends(_verify_token)):
     """Generate a focus plan with cited habits from the curated catalogue.
 
     Expects JSON body with:
     - context: str (the health context payload, same as what the app sends to Claude)
-    - token: str (API token for auth)
 
     Optional:
     - outcomes: list[str] (selected health outcomes)
@@ -134,16 +134,6 @@ async def generate_focus_plan(request: Request):
     - wearable_summary: str (Apple Health data summary)
     """
     body = await request.json()
-
-    # Auth — config is injected by create_app() via app.state
-    config = request.app.state.config
-    token = body.get("token") or request.headers.get("authorization", "").replace("Bearer ", "") or request.headers.get("x-app-token", "")
-    if not config.api_token:
-        raise HTTPException(500, "API token not configured")
-    if not token or token != config.api_token:
-        # Also check token_persons for per-user tokens
-        if token not in (config.token_persons or {}):
-            raise HTTPException(403, "Invalid token")
 
     context = body.get("context", "")
     outcomes = body.get("outcomes", [])

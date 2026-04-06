@@ -694,7 +694,8 @@ class TestGenerateFocusPlan:
 
         resp = client.post(
             "/api/v1/generate-focus-plan",
-            json={"token": TOKEN, "context": "Test user context"},
+            headers={"x-app-token": TOKEN},
+            json={"context": "Test user context"},
         )
         assert resp.status_code == 200
         body = resp.json()
@@ -715,7 +716,8 @@ class TestGenerateFocusPlan:
 
         resp = multi_user_client.post(
             "/api/v1/generate-focus-plan",
-            json={"token": PAUL_TOKEN, "person_id": "paul-001", "context": "Paul's health context"},
+            headers={"x-app-token": PAUL_TOKEN},
+            json={"person_id": "paul-001", "context": "Paul's health context"},
         )
         assert resp.status_code == 200, f"Per-user token should be accepted, got {resp.status_code}"
 
@@ -737,7 +739,8 @@ class TestGenerateFocusPlan:
         # Generate a focus plan
         resp = multi_user_client.post(
             "/api/v1/generate-focus-plan",
-            json={"token": PAUL_TOKEN, "person_id": "paul-001", "context": "Paul's health context"},
+            headers={"x-app-token": PAUL_TOKEN},
+            json={"person_id": "paul-001", "context": "Paul's health context"},
         )
         assert resp.status_code == 200
         body = resp.json()
@@ -764,7 +767,8 @@ class TestGenerateFocusPlan:
         # Generate
         multi_user_client.post(
             "/api/v1/generate-focus-plan",
-            json={"token": PAUL_TOKEN, "person_id": "paul-001", "context": "Paul's health context"},
+            headers={"x-app-token": PAUL_TOKEN},
+            json={"person_id": "paul-001", "context": "Paul's health context"},
         )
 
         # Check context
