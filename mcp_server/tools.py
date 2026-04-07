@@ -12,7 +12,7 @@ import sys
 import webbrowser
 
 logger = logging.getLogger("health-engine.tools")
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -1419,6 +1419,90 @@ def _get_status(user_id: str | None = None) -> dict:
     config = _load_config(user_id)
     has_config = bool(config.get("profile", {}).get("age"))
     return {"data_dir": str(data_dir), "config_loaded": has_config, "files": files}
+
+
+def _get_ingest_status(user_id: str | None = None) -> dict:
+    """Diagnose wearable data ingest: last-seen per source, today's metrics, gaps.
+
+    Returns a dict with:
+        has_data_today: bool
+        sources: {source: {last_date, days_with_data, metrics_today: [sorted list]}}
+    """
+    person_id = _resolve_person_id(user_id)
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    cutoff = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
+
+    if not person_id:
+        return {"has_data_today": False, "sources": {}, "note": f"No person record for user_id={user_id}"}
+
+    try:
+        from engine.gateway.db import get_db, init_db
+        init_db()
+        db = get_db()
+
+        # Get all rows in last 7 days grouped by source
+        rows = db.execute(
+            "SELECT date, source, rhr, hrv, sleep_hrs, steps, vo2_max, "
+            "deep_sleep_hrs, calories_active, body_battery "
+            "FROM wearable_daily WHERE person_id = ? AND date >= ? ORDER BY date DESC",
+            (person_id, cutoff),
+        ).fetchall()
+
+        sources = {}
+        has_data_today = False
+        metric_names = ["rhr", "hrv", "sleep_hrs", "steps", "vo2_max",
+                        "deep_sleep_hrs", "calories_active", "body_battery"]
+
+        for row in rows:
+            src = row["source"] or "unknown"
+            if src not in sources:
+                sources[src] = {"last_date": row["date"], "days_with_data": 0, "dates": set(), "metrics_today": []}
+            sources[src]["dates"].add(row["date"])
+            if row["date"] > sources[src]["last_date"]:
+                sources[src]["last_date"] = row["date"]
+            if row["date"] == today:
+                has_data_today = True
+                for m in metric_names:
+                    if row[m] is not None and m not in sources[src]["metrics_today"]:
+                        sources[src]["metrics_today"].append(m)
+
+        # Finalize
+        for src in sources:
+            sources[src]["days_with_data"] = len(sources[src]["dates"])
+            sources[src]["metrics_today"] = sorted(sources[src]["metrics_today"])
+            del sources[src]["dates"]  # Don't return internal set
+
+        return {"has_data_today": has_data_today, "sources": sources}
+    except Exception as e:
+        return {"has_data_today": False, "sources": {}, "error": str(e)}
+
+
+def _set_source_preference(source: str, user_id: str | None = None) -> dict:
+    """Set the user's preferred wearable data source.
+
+    Once set, source change warnings are suppressed when the new source
+    matches the preference. Valid sources: garmin, apple_health, oura, whoop.
+    """
+    valid_sources = {"garmin", "apple_health", "oura", "whoop"}
+    if source not in valid_sources:
+        return {"error": f"Invalid source '{source}'. Must be one of: {', '.join(sorted(valid_sources))}"}
+
+    person_id = _resolve_person_id(user_id)
+    if not person_id:
+        return {"error": f"No person record for user_id={user_id}"}
+
+    try:
+        from engine.gateway.db import get_db, init_db
+        init_db()
+        db = get_db()
+        db.execute(
+            "UPDATE person SET wearable_source_preference = ? WHERE id = ?",
+            (source, person_id),
+        )
+        db.commit()
+        return {"set": True, "source": source, "person_id": person_id}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 def _onboard(user_id: str | None = None) -> dict:
@@ -3787,6 +3871,8 @@ TOOL_REGISTRY = {
     "search_podcasts": _search_podcasts,
     "record_hypothesis": _record_hypothesis_tool,
     "get_outcomes": _get_outcomes_tool,
+    "get_ingest_status": _get_ingest_status,
+    "set_source_preference": _set_source_preference,
     # Excluded from HTTP: auth_garmin (interactive), auth_oura (interactive),
     # auth_whoop (interactive), open_dashboard (browser)
 }
@@ -3928,6 +4014,16 @@ def register_tools(mcp: FastMCP):
     def get_status(user_id: str | None = None) -> dict:
         """Data files inventory — what exists, last modified, row counts. Useful for understanding what data the user has."""
         return _get_status(_effective_user_id(user_id))
+
+    @mcp.tool()
+    def get_ingest_status(user_id: str | None = None) -> dict:
+        """Diagnose wearable data sync: shows last-seen date per source (Garmin, Apple Health, Oura, WHOOP), which metrics arrived today, and days with data in the last 7 days. Call this when a user asks 'is my data syncing?' or when activity data seems missing."""
+        return _get_ingest_status(_effective_user_id(user_id))
+
+    @mcp.tool()
+    def set_source_preference(source: str, user_id: str | None = None) -> dict:
+        """Set the user's preferred wearable source (garmin, apple_health, oura, whoop). Call this after the user confirms which wearable they want as primary. Stops source change warnings for the confirmed source."""
+        return _set_source_preference(source, _effective_user_id(user_id))
 
     @mcp.tool()
     def onboard(user_id: str | None = None) -> dict:

@@ -135,6 +135,107 @@ class TestDetectSourceChanges:
         assert "hrv" in result
 
 
+# --- source preference tests ---
+
+
+class TestSourcePreference:
+    """When a user confirms their preferred wearable source, detect_source_changes stops flagging."""
+
+    def test_preference_suppresses_source_change(self, db_with_andrew):
+        """Source changed from garmin to apple_health, but user set preference to apple_health."""
+        _insert_wearable(db_with_andrew, "andrew-001", _5D_AGO, "garmin", vo2_max=47.0)
+        _insert_wearable(db_with_andrew, "andrew-001", _1D_AGO, "apple_health", vo2_max=32.3)
+
+        # Without preference, should flag
+        result = detect_source_changes(db_with_andrew, "andrew-001", days=7)
+        assert "vo2_max" in result
+
+        # Set preference
+        db_with_andrew.execute(
+            "UPDATE person SET wearable_source_preference = ? WHERE id = ?",
+            ("apple_health", "andrew-001"),
+        )
+        db_with_andrew.commit()
+
+        # With preference matching new source, should NOT flag
+        result = detect_source_changes(db_with_andrew, "andrew-001", days=7)
+        assert "vo2_max" not in result
+
+    def test_preference_mismatch_still_flags(self, db_with_andrew):
+        """Preference is garmin but source changed to apple_health. Still flags."""
+        _insert_wearable(db_with_andrew, "andrew-001", _5D_AGO, "garmin", vo2_max=47.0)
+        _insert_wearable(db_with_andrew, "andrew-001", _1D_AGO, "apple_health", vo2_max=32.3)
+
+        db_with_andrew.execute(
+            "UPDATE person SET wearable_source_preference = ? WHERE id = ?",
+            ("garmin", "andrew-001"),
+        )
+        db_with_andrew.commit()
+
+        result = detect_source_changes(db_with_andrew, "andrew-001", days=7)
+        assert "vo2_max" in result
+
+    def test_no_preference_still_flags(self, db_with_andrew):
+        """No preference set (NULL). Normal behavior, flags source change."""
+        _insert_wearable(db_with_andrew, "andrew-001", _5D_AGO, "garmin", rhr=52)
+        _insert_wearable(db_with_andrew, "andrew-001", _1D_AGO, "apple_health", rhr=49)
+
+        result = detect_source_changes(db_with_andrew, "andrew-001", days=7)
+        assert "rhr" in result
+
+    def test_multiple_metrics_preference_suppresses_all(self, db_with_andrew):
+        """Preference suppresses all metrics whose new source matches."""
+        _insert_wearable(db_with_andrew, "andrew-001", _5D_AGO, "garmin", vo2_max=47.0, hrv=65, rhr=52)
+        _insert_wearable(db_with_andrew, "andrew-001", _1D_AGO, "apple_health", vo2_max=32.3, hrv=45, rhr=49)
+
+        db_with_andrew.execute(
+            "UPDATE person SET wearable_source_preference = ? WHERE id = ?",
+            ("apple_health", "andrew-001"),
+        )
+        db_with_andrew.commit()
+
+        result = detect_source_changes(db_with_andrew, "andrew-001", days=7)
+        assert result == {}
+
+
+# --- set_source_preference tool tests ---
+
+
+class TestSetSourcePreference:
+    """Tests for the MCP tool that records user's wearable source choice."""
+
+    def test_registered_in_tool_registry(self):
+        from mcp_server.tools import TOOL_REGISTRY, _set_source_preference
+        assert "set_source_preference" in TOOL_REGISTRY
+        assert TOOL_REGISTRY["set_source_preference"] is _set_source_preference
+
+    def test_valid_source_sets_correctly(self, db_with_andrew, monkeypatch):
+        from mcp_server.tools import _set_source_preference
+        monkeypatch.setattr("mcp_server.tools._resolve_person_id", lambda uid: "andrew-001")
+        result = _set_source_preference("apple_health", user_id="andrew")
+        assert result["set"] is True
+        assert result["source"] == "apple_health"
+
+        # Verify it's written
+        row = db_with_andrew.execute(
+            "SELECT wearable_source_preference FROM person WHERE id = 'andrew-001'"
+        ).fetchone()
+        assert row["wearable_source_preference"] == "apple_health"
+
+    def test_invalid_source_returns_error(self, db_with_andrew, monkeypatch):
+        from mcp_server.tools import _set_source_preference
+        monkeypatch.setattr("mcp_server.tools._resolve_person_id", lambda uid: "andrew-001")
+        result = _set_source_preference("fitbit", user_id="andrew")
+        assert "error" in result
+        assert "fitbit" in result["error"]
+
+    def test_unknown_user_returns_error(self, db_with_andrew, monkeypatch):
+        from mcp_server.tools import _set_source_preference
+        monkeypatch.setattr("mcp_server.tools._resolve_person_id", lambda uid: None)
+        result = _set_source_preference("garmin", user_id="nobody")
+        assert "error" in result
+
+
 # --- validate_coaching_claims tests ---
 
 

@@ -22,12 +22,39 @@ FAILED=0
 
 log() { echo "[$(date +%H:%M:%S)] $1"; }
 
+# Time-sensitive cron guard: don't re-trigger scheduled crons outside their window.
+# Evening crons: only 19:00-21:00. Morning crons: only 06:00-09:00.
+# NOTE: uses Mac Mini local time, not per-user timezone. The Python scheduler
+# handles per-user tz checks; this is a second gate to prevent 3 AM re-triggers.
+_cron_in_window() {
+    local cron_name="$1"
+    local hour
+    hour=$(date +%H | sed 's/^0//')
+    case "$cron_name" in
+        *evening*|*night*|*wind-down*)
+            [[ $hour -ge 19 && $hour -lt 21 ]] && return 0
+            log "  SKIP: $cron_name outside evening window (current hour: $hour, need 19-21)"
+            return 1 ;;
+        *morning*|*brief*)
+            [[ $hour -ge 6 && $hour -lt 9 ]] && return 0
+            log "  SKIP: $cron_name outside morning window (current hour: $hour, need 06-09)"
+            return 1 ;;
+        *)
+            return 0 ;;  # Non-time-sensitive crons: always re-trigger
+    esac
+}
+
 # ── 1. Re-trigger errored crons ──
 log "Checking for errored crons..."
 ERRORED_CRONS=$(openclaw cron list 2>&1 | grep "error" | awk '{print $1, $2}' || true)
+SKIPPED=0
 
 if [[ -n "$ERRORED_CRONS" ]]; then
     while IFS=' ' read -r cron_id cron_name; do
+        if ! _cron_in_window "$cron_name"; then
+            SKIPPED=$((SKIPPED + 1))
+            continue
+        fi
         if [[ "$DRY_RUN" == "--dry-run" ]]; then
             log "  [DRY RUN] Would re-trigger: $cron_name ($cron_id)"
         else
@@ -88,7 +115,7 @@ fi
 
 # ── Summary ──
 log ""
-log "Remediation complete. Fixed: $FIXED, Failed: $FAILED"
+log "Remediation complete. Fixed: $FIXED, Failed: $FAILED, Skipped (outside window): $SKIPPED"
 
 if [[ $FAILED -gt 0 ]]; then
     exit 1

@@ -205,11 +205,26 @@ def detect_source_changes(db, person_id: str, days: int = 7) -> dict:
     Returns a dict like:
         {"vo2_max": {"old_source": "garmin", "new_source": "apple_health"}}
     Empty dict means no source changes detected.
+
+    If the user has set a wearable_source_preference, changes where the new
+    source matches the preference are suppressed (user already confirmed).
     """
     from datetime import datetime, timedelta
 
     cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
     metrics = ["vo2_max", "rhr", "hrv", "sleep_hrs"]
+
+    # Check if user has a confirmed source preference
+    preference = None
+    try:
+        row = db.execute(
+            "SELECT wearable_source_preference FROM person WHERE id = ?",
+            (person_id,),
+        ).fetchone()
+        if row:
+            preference = row["wearable_source_preference"]
+    except Exception:
+        pass  # Column may not exist yet, treat as no preference
 
     changes = {}
     for metric in metrics:
@@ -233,9 +248,13 @@ def detect_source_changes(db, person_id: str, days: int = 7) -> dict:
                 sources_seen.append(src)
 
         if len(sources_seen) >= 2:
+            new_source = sources_seen[-1]
+            # If user confirmed this source as their preference, skip the flag
+            if preference and new_source == preference:
+                continue
             changes[metric] = {
                 "old_source": sources_seen[-2],
-                "new_source": sources_seen[-1],
+                "new_source": new_source,
             }
 
     return changes

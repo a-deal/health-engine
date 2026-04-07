@@ -566,6 +566,7 @@ def _migrate(conn: sqlite3.Connection):
         "role": "ALTER TABLE person ADD COLUMN role TEXT DEFAULT 'user'",
         "unit_system": "ALTER TABLE person ADD COLUMN unit_system TEXT NOT NULL DEFAULT 'imperial'",
         "apple_user_identifier": "ALTER TABLE person ADD COLUMN apple_user_identifier TEXT",
+        "wearable_source_preference": "ALTER TABLE person ADD COLUMN wearable_source_preference TEXT",
     }
     dirty = False
     for col, sql in migrations.items():

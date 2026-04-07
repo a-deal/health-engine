@@ -114,7 +114,8 @@ for user_dir in "$USERS_DIR"/*/; do
         NOW=$(date +%s)
         AGE_HOURS=$(( (NOW - LATEST_MOD) / 3600 ))
         if [[ $AGE_HOURS -gt $STALE_HOURS ]]; then
-            WARNINGS+=("User '$user_id': No data update in ${AGE_HOURS}h (>${STALE_HOURS}h)")
+            # Bucket to threshold for dedup stability (120h and 124h both report as ">72h")
+            WARNINGS+=("User '$user_id': data stale (>${STALE_HOURS}h)")
         else
             echo "  $user_id: Data fresh (${AGE_HOURS}h ago)"
         fi
@@ -167,6 +168,43 @@ else
     WARNINGS+=("MCP server: Not running (OpenClaw may restart it on demand)")
 fi
 
+# ── Dedup: compare against last run ──
+STATE_FILE="$PROJECT_DIR/data/admin/last_health_check.json"
+
+# Build current findings as sorted text (one per line)
+CURRENT_FINDINGS=""
+for issue in "${ISSUES[@]}"; do CURRENT_FINDINGS+="ISSUE:$issue"$'\n'; done
+for warning in "${WARNINGS[@]}"; do CURRENT_FINDINGS+="WARN:$warning"$'\n'; done
+CURRENT_FINDINGS=$(echo "$CURRENT_FINDINGS" | sort)
+
+PREVIOUS_FINDINGS=""
+PREVIOUS_TS="never"
+if [[ -f "$STATE_FILE" ]]; then
+    PREVIOUS_FINDINGS=$(python3 -c "import json,sys; d=json.load(open('$STATE_FILE')); print('\n'.join(sorted(d.get('findings',[]))))" 2>/dev/null || true)
+    PREVIOUS_TS=$(python3 -c "import json; print(json.load(open('$STATE_FILE')).get('timestamp','?'))" 2>/dev/null || true)
+fi
+
+# Find new items not in previous run
+NEW_ISSUES=()
+NEW_WARNINGS=()
+while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    if ! echo "$PREVIOUS_FINDINGS" | grep -qF "$line"; then
+        case "$line" in
+            ISSUE:*) NEW_ISSUES+=("${line#ISSUE:}") ;;
+            WARN:*)  NEW_WARNINGS+=("${line#WARN:}") ;;
+        esac
+    fi
+done <<< "$CURRENT_FINDINGS"
+
+# Save current state for next run
+mkdir -p "$(dirname "$STATE_FILE")"
+echo "$CURRENT_FINDINGS" | python3 -c "
+import json, sys
+findings = [l for l in sys.stdin.read().strip().split('\n') if l]
+json.dump({'timestamp': '$(date -u +%Y-%m-%dT%H:%M:%SZ)', 'findings': sorted(findings)}, open(sys.argv[1], 'w'), indent=2)
+" "$STATE_FILE"
+
 # ── Report ──
 echo ""
 echo "================================"
@@ -176,19 +214,36 @@ if [[ ${#ISSUES[@]} -eq 0 && ${#WARNINGS[@]} -eq 0 ]]; then
     exit 0
 fi
 
-if [[ ${#ISSUES[@]} -gt 0 ]]; then
-    echo "CRITICAL ISSUES (${#ISSUES[@]}):"
-    for issue in "${ISSUES[@]}"; do
+# If nothing new since last run, emit one-liner instead of full report
+if [[ ${#NEW_ISSUES[@]} -eq 0 && ${#NEW_WARNINGS[@]} -eq 0 && "$PREVIOUS_FINDINGS" != "" ]]; then
+    echo "No new issues since last check ($PREVIOUS_TS). ${#ISSUES[@]} issue(s), ${#WARNINGS[@]} warning(s) unchanged."
+    echo "================================"
+    # Still exit 1 if critical issues persist
+    if [[ ${#ISSUES[@]} -gt 0 ]]; then exit 1; fi
+    exit 0
+fi
+
+if [[ ${#NEW_ISSUES[@]} -gt 0 ]]; then
+    echo "NEW CRITICAL ISSUES (${#NEW_ISSUES[@]}):"
+    for issue in "${NEW_ISSUES[@]}"; do
         echo "  [!] $issue"
     done
 fi
 
-if [[ ${#WARNINGS[@]} -gt 0 ]]; then
+if [[ ${#NEW_WARNINGS[@]} -gt 0 ]]; then
     echo ""
-    echo "WARNINGS (${#WARNINGS[@]}):"
-    for warning in "${WARNINGS[@]}"; do
+    echo "NEW WARNINGS (${#NEW_WARNINGS[@]}):"
+    for warning in "${NEW_WARNINGS[@]}"; do
         echo "  [~] $warning"
     done
+fi
+
+# Show persistent count for context
+PERSISTENT_ISSUES=$(( ${#ISSUES[@]} - ${#NEW_ISSUES[@]} ))
+PERSISTENT_WARNINGS=$(( ${#WARNINGS[@]} - ${#NEW_WARNINGS[@]} ))
+if [[ $PERSISTENT_ISSUES -gt 0 || $PERSISTENT_WARNINGS -gt 0 ]]; then
+    echo ""
+    echo "UNCHANGED: $PERSISTENT_ISSUES issue(s), $PERSISTENT_WARNINGS warning(s) from previous check."
 fi
 
 echo "================================"
