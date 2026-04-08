@@ -900,6 +900,21 @@ def _run_schedule(schedule_type: str, target_hour: int, require_friday: bool = F
         "eligible_count": len(persons),
         "results": results,
     }
+
+    # Piggyback reconciliation check on the weekly review pass (once weekly)
+    if schedule_type == "weekly_review":
+        try:
+            unreconciled = get_unreconciled_goals(db)
+            summary["reconciliation"] = {
+                "count": len(unreconciled),
+                "users": [{"name": u["name"], "goals": u["user_stated_goals"], "exclusions": u["exclusions"]} for u in unreconciled],
+            }
+            if unreconciled:
+                logger.info("Reconciliation check: %d users with unreconciled goals", len(unreconciled))
+        except Exception as e:
+            logger.error("Failed to check unreconciled goals: %s", e)
+            summary["reconciliation"] = {"count": 0, "users": [], "error": str(e)}
+
     _audit_scheduler(schedule_type, dry_run, summary)
     return summary
 

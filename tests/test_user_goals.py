@@ -359,3 +359,78 @@ class TestReconciliationDiff:
         from engine.gateway.scheduler import get_unreconciled_goals
         result = get_unreconciled_goals(db_with_paul)
         assert len(result) == 1
+
+
+# --- Reconciliation cron (piggybacks on weekly_review) ---
+
+
+class TestReconciliationCron:
+    """Weekly review pass should check for unreconciled goals and log them."""
+
+    @patch("engine.gateway.scheduler._compose_message", return_value="Weekly review: RHR trending down, HRV up. Solid week.")
+    @patch("engine.gateway.scheduler._gather_context", return_value={"checkin": {"data_available": {"garmin": True}, "score": {"coverage": 6}}})
+    @patch("engine.gateway.scheduler._user_local_now")
+    @patch("engine.gateway.scheduler._get_eligible_persons")
+    @patch("engine.gateway.scheduler._audit_scheduler")
+    @patch("engine.gateway.scheduler.get_unreconciled_goals")
+    def test_weekly_review_checks_unreconciled(self, mock_unrec, mock_audit, mock_persons,
+                                                mock_now, mock_context, mock_compose, db_with_paul):
+        from zoneinfo import ZoneInfo
+        mock_persons.return_value = [
+            {"id": "paul-001", "name": "Paul", "health_engine_user_id": "paul",
+             "channel": "whatsapp", "channel_target": "+17038878948", "timezone": "America/Los_Angeles"},
+        ]
+        mock_now.return_value = datetime(2026, 4, 10, 18, 10, tzinfo=ZoneInfo("America/Los_Angeles"))
+        mock_unrec.return_value = [
+            {"person_id": "paul-001", "name": "Paul", "user_stated_goals": "3x strength/week",
+             "exclusions": "weight", "stated_at": "2026-04-06T00:00:00Z"},
+        ]
+
+        from engine.gateway.scheduler import _run_schedule
+        result = _run_schedule("weekly_review", target_hour=18, require_friday=True, dry_run=True)
+
+        mock_unrec.assert_called_once()
+        assert "reconciliation" in result
+        assert result["reconciliation"]["count"] == 1
+        assert result["reconciliation"]["users"][0]["name"] == "Paul"
+
+    @patch("engine.gateway.scheduler._compose_message", return_value="Morning brief: RHR 48, HRV 66, sleep 7.1 hours.")
+    @patch("engine.gateway.scheduler._gather_context", return_value={"checkin": {"data_available": {"garmin": True}, "score": {"coverage": 6}}})
+    @patch("engine.gateway.scheduler._user_local_now")
+    @patch("engine.gateway.scheduler._get_eligible_persons")
+    @patch("engine.gateway.scheduler._audit_scheduler")
+    @patch("engine.gateway.scheduler.get_unreconciled_goals")
+    def test_morning_brief_does_not_check_unreconciled(self, mock_unrec, mock_audit, mock_persons,
+                                                         mock_now, mock_context, mock_compose, db_with_paul):
+        from zoneinfo import ZoneInfo
+        mock_persons.return_value = [
+            {"id": "paul-001", "name": "Paul", "health_engine_user_id": "paul",
+             "channel": "whatsapp", "channel_target": "+17038878948", "timezone": "America/Los_Angeles"},
+        ]
+        mock_now.return_value = datetime(2026, 4, 8, 7, 10, tzinfo=ZoneInfo("America/Los_Angeles"))
+
+        from engine.gateway.scheduler import _run_schedule
+        _run_schedule("morning_brief", target_hour=7, dry_run=True)
+
+        mock_unrec.assert_not_called()
+
+    @patch("engine.gateway.scheduler._compose_message", return_value="Weekly review: RHR trending down.")
+    @patch("engine.gateway.scheduler._gather_context", return_value={"checkin": {"data_available": {"garmin": True}, "score": {"coverage": 6}}})
+    @patch("engine.gateway.scheduler._user_local_now")
+    @patch("engine.gateway.scheduler._get_eligible_persons")
+    @patch("engine.gateway.scheduler._audit_scheduler")
+    @patch("engine.gateway.scheduler.get_unreconciled_goals")
+    def test_no_unreconciled_returns_zero_count(self, mock_unrec, mock_audit, mock_persons,
+                                                  mock_now, mock_context, mock_compose, db_with_paul):
+        from zoneinfo import ZoneInfo
+        mock_persons.return_value = [
+            {"id": "paul-001", "name": "Paul", "health_engine_user_id": "paul",
+             "channel": "whatsapp", "channel_target": "+17038878948", "timezone": "America/Los_Angeles"},
+        ]
+        mock_now.return_value = datetime(2026, 4, 10, 18, 10, tzinfo=ZoneInfo("America/Los_Angeles"))
+        mock_unrec.return_value = []
+
+        from engine.gateway.scheduler import _run_schedule
+        result = _run_schedule("weekly_review", target_hour=18, require_friday=True, dry_run=True)
+
+        assert result["reconciliation"]["count"] == 0
