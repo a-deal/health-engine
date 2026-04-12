@@ -384,7 +384,10 @@ class TestGetConversationsVoiceFiltering:
                 created_at TEXT NOT NULL
             )
         """)
-        now = "2026-04-03T12:00:00Z"
+        # Relative to real "now" so the 168h window in _get_conversations always
+        # covers the fixture rows. Hardcoded dates rot.
+        from datetime import datetime, timezone, timedelta
+        now = (datetime.now(timezone.utc) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
         # WhatsApp message
         db.execute(
             "INSERT INTO conversation_message (user_id, role, content, sender_name, channel, session_key, timestamp, created_at) VALUES (?,?,?,?,?,?,?,?)",
