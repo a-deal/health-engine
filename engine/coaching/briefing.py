@@ -300,14 +300,14 @@ def build_briefing(config: dict) -> dict:
             from engine.gateway.db import get_db, init_db
             init_db()
             _bp_latest = get_db().execute(
-                "SELECT date FROM bp_entry WHERE person_id = ? AND deleted_at IS NULL ORDER BY date DESC LIMIT 1",
+                "SELECT date FROM bp_entry WHERE person_id = ? ORDER BY date DESC LIMIT 1",
                 (_person_id,),
             ).fetchone()
             if _bp_latest:
                 metric_dates["bp_single"] = _bp_latest["date"]
                 metric_dates["bp_protocol"] = _bp_latest["date"]
             _bp_7d = get_db().execute(
-                "SELECT COUNT(*) as cnt FROM bp_entry WHERE person_id = ? AND deleted_at IS NULL AND date >= date('now', '-7 days')",
+                "SELECT COUNT(*) as cnt FROM bp_entry WHERE person_id = ? AND date >= date('now', '-7 days')",
                 (_person_id,),
             ).fetchone()
             metric_counts["bp"] = _bp_7d["cnt"] if _bp_7d else 0
@@ -323,7 +323,7 @@ def build_briefing(config: dict) -> dict:
             from engine.gateway.db import get_db, init_db
             init_db()
             _wt_latest = get_db().execute(
-                "SELECT date FROM weight_entry WHERE person_id = ? AND deleted_at IS NULL ORDER BY date DESC LIMIT 1",
+                "SELECT date FROM weight_entry WHERE person_id = ? ORDER BY date DESC LIMIT 1",
                 (_person_id,),
             ).fetchone()
             if _wt_latest:
@@ -833,7 +833,7 @@ def build_briefing(config: dict) -> dict:
             from engine.gateway.db import get_db, init_db
             init_db()
             _bp_row = get_db().execute(
-                "SELECT date FROM bp_entry WHERE person_id = ? AND deleted_at IS NULL ORDER BY date DESC LIMIT 1",
+                "SELECT date FROM bp_entry WHERE person_id = ? ORDER BY date DESC LIMIT 1",
                 (_person_id,),
             ).fetchone()
             if _bp_row:
@@ -880,7 +880,7 @@ def build_briefing(config: dict) -> dict:
             from engine.gateway.db import get_db, init_db
             init_db()
             _wt_row = get_db().execute(
-                "SELECT date FROM weight_entry WHERE person_id = ? AND deleted_at IS NULL ORDER BY date DESC LIMIT 1",
+                "SELECT date FROM weight_entry WHERE person_id = ? ORDER BY date DESC LIMIT 1",
                 (_person_id,),
             ).fetchone()
             if _wt_row:

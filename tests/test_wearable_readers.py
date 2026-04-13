@@ -415,6 +415,84 @@ class TestBriefingBpFromSqlite:
         assert count == 1
 
 
+class TestBriefingQueriesRunAgainstRealSchema:
+    """Regression for the Apr 2–13 latent bug.
+
+    Commit f69646df (Apr 2) added SQLite reads to briefing.py with the
+    clause `AND deleted_at IS NULL` copy-pasted from the `person` table
+    query pattern. `bp_entry` and `weight_entry` have no `deleted_at`
+    column, so every query raised `OperationalError`, the `except
+    Exception` block swallowed it, and briefing silently read from CSV
+    for 11 days. The prior TestBriefingBpFromSqlite tests used their
+    own filter-less SQL and passed, so the bug was invisible to CI.
+
+    These tests execute the exact query strings from briefing.py against
+    the real schema (via init_db in the briefing_db fixture), which is
+    the test the old suite was missing: does the production query string
+    survive contact with the production schema?
+    """
+
+    # Queries copied verbatim from briefing.py (lines 303, 310, 326, 836, 891).
+    # If briefing.py changes these queries, update here and vice versa.
+    BP_LATEST_DATE_QUERY = (
+        "SELECT date FROM bp_entry WHERE person_id = ? "
+        "ORDER BY date DESC LIMIT 1"
+    )
+    BP_7D_COUNT_QUERY = (
+        "SELECT COUNT(*) as cnt FROM bp_entry WHERE person_id = ? "
+        "AND date >= date('now', '-7 days')"
+    )
+    WEIGHT_LATEST_DATE_QUERY = (
+        "SELECT date FROM weight_entry WHERE person_id = ? "
+        "ORDER BY date DESC LIMIT 1"
+    )
+
+    def test_bp_latest_date_query_runs(self, briefing_db):
+        """briefing.py:303 + :836 — latest BP date query must execute cleanly."""
+        conn, db_path, tmp_path = briefing_db
+        row = conn.execute(self.BP_LATEST_DATE_QUERY, ("p1",)).fetchone()
+        assert row is not None
+        assert row["date"] == "2026-03-15"
+
+    def test_bp_7d_count_query_runs(self, briefing_db):
+        """briefing.py:310 — 7-day BP count query must execute cleanly."""
+        conn, db_path, tmp_path = briefing_db
+        result = conn.execute(self.BP_7D_COUNT_QUERY, ("p1",)).fetchone()
+        assert result is not None
+        # Count may be 0 depending on when the test runs vs the fixture dates;
+        # the point of this test is that the query doesn't throw.
+        assert result["cnt"] >= 0
+
+    def test_weight_latest_date_query_runs(self, briefing_db):
+        """briefing.py:326 + :891 — latest weight date query must execute cleanly."""
+        conn, db_path, tmp_path = briefing_db
+        row = conn.execute(self.WEIGHT_LATEST_DATE_QUERY, ("p1",)).fetchone()
+        assert row is not None
+        assert row["date"] == "2026-04-01"
+
+    def test_bp_entry_has_no_deleted_at_column(self, briefing_db):
+        """Schema guard: if someone adds a deleted_at column to bp_entry,
+        the briefing.py queries need a matching audit. This test fails
+        loudly when the schema changes, forcing that audit."""
+        conn, db_path, tmp_path = briefing_db
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(bp_entry)").fetchall()]
+        assert "deleted_at" not in cols, (
+            "bp_entry gained a deleted_at column. Re-audit briefing.py bp_entry "
+            "queries (lines ~303, 310, 836) to decide whether they should "
+            "filter on it. See commit history for the Apr 2026 incident."
+        )
+
+    def test_weight_entry_has_no_deleted_at_column(self, briefing_db):
+        """Mirror schema guard for weight_entry."""
+        conn, db_path, tmp_path = briefing_db
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(weight_entry)").fetchall()]
+        assert "deleted_at" not in cols, (
+            "weight_entry gained a deleted_at column. Re-audit briefing.py "
+            "weight_entry queries (lines ~326, 891). See commit history for "
+            "the Apr 2026 incident."
+        )
+
+
 class TestBriefingWeightFromSqlite:
     """Briefing weight date should come from SQLite, not read_csv(weight_log.csv)."""
 
