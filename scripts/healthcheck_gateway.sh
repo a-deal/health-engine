@@ -17,7 +17,9 @@ if [ "$AUTH_STATUS" = "404" ] || [ "$AUTH_STATUS" = "000" ]; then
 fi
 
 # Check 3: service name should NOT be kiso-v1
-SERVICE=$(echo "$HEALTH" | python3 -c "import sys,json; print(json.load(sys.stdin).get(service,unknown))" 2>/dev/null)
+# Previously had bare-name bug: .get(service, unknown) — NameError silenced by
+# 2>/dev/null, $SERVICE always empty, check never fired. Fixed 2026-04-13.
+SERVICE=$(echo "$HEALTH" | python3 -c "import sys,json; print(json.load(sys.stdin).get('service','unknown'))" 2>/dev/null)
 if [ "$SERVICE" = "kiso-v1" ]; then
     FAILURES="$FAILURES\n- Port 18800 running v1-only API instead of full gateway"
 fi
