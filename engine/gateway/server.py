@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import secrets
+import subprocess
 import time
 from collections import defaultdict
 from datetime import datetime
@@ -30,6 +31,36 @@ from .config import GatewayConfig, load_gateway_config
 from .token_store import TokenStore
 
 logger = logging.getLogger("health-engine.gateway")
+
+
+def _resolve_commit_sha() -> str:
+    """Resolve current git HEAD sha for the /health `commit` field.
+
+    Resolution order:
+      1. $HEALTH_ENGINE_COMMIT env var (baked in at deploy time if set)
+      2. `git rev-parse HEAD` from the repo containing this file
+      3. "unknown" if neither works (e.g. running from a tarball with no git)
+
+    Called once at app creation; the result is cached on the app so the
+    /health handler never shells out per-request. Step 10 of the deploy
+    state machine asserts this field matches the just-deployed SHA, so
+    catching a zombie-worker drift requires the value be resolved at the
+    worker's own startup, not at request time.
+    """
+    env_sha = os.environ.get("HEALTH_ENGINE_COMMIT", "").strip()
+    if env_sha:
+        return env_sha
+    try:
+        repo_root = Path(__file__).resolve().parents[2]
+        sha = subprocess.check_output(
+            ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=2,
+        ).strip()
+        return sha or "unknown"
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return "unknown"
 
 
 def _wearable_freshness_sqlite(user_id: str) -> dict | None:
@@ -288,6 +319,7 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
     # Expose for use by MCP tools
     app.state.generate_auth_url = generate_auth_url
     app.state.config = config
+    app.state.commit_sha = _resolve_commit_sha()
 
     @app.get("/", response_class=HTMLResponse)
     async def status_page():
@@ -311,7 +343,11 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
 
     @app.get("/health")
     async def health_check():
-        return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+        return {
+            "status": "ok",
+            "timestamp": datetime.utcnow().isoformat(),
+            "commit": app.state.commit_sha,
+        }
 
     @app.get("/health/deep")
     async def deep_health_check():
