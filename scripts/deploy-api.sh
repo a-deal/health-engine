@@ -193,8 +193,11 @@ step_restart_api() {
 # step 9: curl_health — verify the API is reachable and status=ok post-restart.
 # -----------------------------------------------------------------------------
 step_curl_health() {
+    # HEALTH_URL is localhost:18800 — that's correct *on Mac Mini*, where
+    # the API binds. The curl must run there via ssh, not on the laptop.
+    # See 2026-04-13 0744 handoff follow-up #2 for the bug history.
     local body
-    body=$(curl -fsS "$HEALTH_URL")
+    body=$(ssh "$REMOTE" "curl -fsS '$HEALTH_URL'")
     echo "$body"
     if ! printf '%s' "$body" | grep -q '"status"[[:space:]]*:[[:space:]]*"ok"'; then
         echo "ABORT: /health did not report status=ok" >&2
@@ -207,8 +210,10 @@ step_curl_health() {
 # sha we just deployed. Catches zombie-worker drift (old bytecode, new git).
 # -----------------------------------------------------------------------------
 step_assert_commit_matches() {
+    # Same topology note as step_curl_health: curl via ssh on $REMOTE so
+    # localhost:18800 resolves on Mac Mini, not the laptop.
     local body reported
-    body=$(curl -fsS "$HEALTH_URL")
+    body=$(ssh "$REMOTE" "curl -fsS '$HEALTH_URL'")
     reported=$(printf '%s' "$body" | sed -n 's/.*"commit"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
     if [ -z "$reported" ]; then
         echo "ABORT: /health response has no commit field" >&2
