@@ -373,18 +373,33 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
             critical = True
 
         # 2. Per-user data freshness
+        #
+        # Two signals per user:
+        #   - aggregate: max(mtime) across all JSON/CSV, catch-all for
+        #     "user has gone generically silent"
+        #   - critical-file tripwire: any file in _FRESHNESS_TRACKED older
+        #     than stale_hours flags the user as stale, even if a sibling
+        #     file is fresh. Prevents the masking bug where a fresh
+        #     weight_log.csv would hide an 18-day-old apple_health_latest.json.
+        #     See hub/plans/2026-04-12-baseline-consolidation.md Milestone 6.
+        #
+        # _FRESHNESS_TRACKED is imported from mcp_server.tools as the single
+        # source of truth for which files must be fresh.
+        from mcp_server.tools import _FRESHNESS_TRACKED
         users_dir = Path("data/users")
         user_freshness = {}
         stale_hours = 72
         skip_users = {"default", "test_onboard", "test_cleanup", "test_upload", "test_user", "--params"}
 
         if users_dir.exists():
+            import time
+            now = time.time()
             for user_dir in sorted(users_dir.iterdir()):
                 if not user_dir.is_dir() or user_dir.name in skip_users or user_dir.name.startswith("test_"):
                     continue
                 uid = user_dir.name
 
-                # Find most recent file modification
+                # Find most recent file modification (aggregate signal)
                 latest_mod = 0
                 for f in user_dir.rglob("*.json"):
                     mtime = f.stat().st_mtime
@@ -396,14 +411,29 @@ def create_app(config: GatewayConfig | None = None) -> "FastAPI":
                     if mtime > latest_mod:
                         latest_mod = mtime
 
+                # Critical-file tripwire: per-file check against _FRESHNESS_TRACKED
+                stale_critical = []
+                for critical_name in _FRESHNESS_TRACKED:
+                    cpath = user_dir / critical_name
+                    if cpath.exists():
+                        cage = (now - cpath.stat().st_mtime) / 3600
+                        if cage >= stale_hours:
+                            stale_critical.append({
+                                "file": critical_name,
+                                "age_hours": round(cage, 1),
+                            })
+
                 if latest_mod > 0:
-                    import time
-                    age_hours = (time.time() - latest_mod) / 3600
-                    status = "ok" if age_hours < stale_hours else "stale"
-                    user_freshness[uid] = {
+                    age_hours = (now - latest_mod) / 3600
+                    aggregate_stale = age_hours >= stale_hours
+                    status = "stale" if (aggregate_stale or stale_critical) else "ok"
+                    entry = {
                         "status": status,
                         "last_data_hours_ago": round(age_hours, 1),
                     }
+                    if stale_critical:
+                        entry["stale_critical_files"] = stale_critical
+                    user_freshness[uid] = entry
                 else:
                     user_freshness[uid] = {"status": "no_data"}
 
