@@ -3079,6 +3079,38 @@ _APPLE_HEALTH_METRICS = {
     "blood_oxygen", "active_calories", "respiratory_rate",
 }
 
+# Observability log for ingest payload shape. One JSONL line per accepted
+# ingest call. Downstream analysis: scripts/analyze_ingest_log.py. This is
+# the diagnostic surface the 2026-03-25 Apple Health near-empty-payload
+# incident lacked — server-side guard shipped *after* the incident and
+# before the iPhone client fix (plan M5), so when sparse payloads arrive
+# they are now captured instead of silently enriched into a zero-valued
+# shell. Best-effort: ingest must never fail because of log write errors.
+_INGEST_LOG_PATH = os.path.join("data", "admin", "ingest_log.jsonl")
+
+
+def _append_ingest_log(
+    user_id: str,
+    metric_count: int,
+    metric_keys: list[str],
+    payload_timestamp: str,
+) -> None:
+    """Append one JSONL entry per accepted ingest. Silent on failure."""
+    try:
+        os.makedirs(os.path.dirname(_INGEST_LOG_PATH), exist_ok=True)
+        entry = {
+            "ts": datetime.now().astimezone().isoformat(),
+            "user_id": user_id,
+            "metric_count": metric_count,
+            "metric_keys": sorted(metric_keys),
+            "payload_timestamp": payload_timestamp,
+        }
+        with open(_INGEST_LOG_PATH, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception:
+        # Observability is best-effort. Never fail ingest on log write error.
+        pass
+
 
 def _ingest_health_snapshot(
     user_id: str,
@@ -3370,6 +3402,14 @@ def _ingest_health_snapshot(
     }
     if unknown:
         result["unknown_keys_ignored"] = unknown
+
+    # Observability: append one JSONL line for downstream sparse-payload analysis.
+    _append_ingest_log(
+        user_id=user_id,
+        metric_count=len(clean),
+        metric_keys=list(clean.keys()),
+        payload_timestamp=ts,
+    )
     return result
 
 

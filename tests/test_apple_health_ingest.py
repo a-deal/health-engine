@@ -464,3 +464,119 @@ class TestConnectWearableAppleHealth:
         result = _connect_wearable("apple", user_id="test_user")
         assert result["supported"] is True
         assert result["setup_method"] == "ios_app"
+
+
+# --- Ingest observability log (compound-engineering data source for M5) ---
+
+class TestIngestObservabilityLog:
+    """_ingest_health_snapshot appends one JSONL entry per accepted ingest
+    to _INGEST_LOG_PATH. The log captures metric_count so a downstream
+    analysis script (scripts/analyze_ingest_log.py) can identify sparse
+    payloads — the diagnostic surface the 2026-03-25 Apple Health incident
+    lacked. Rejections are NOT logged (the tool already logs rejections to
+    the kiso.ingest Python logger).
+    """
+
+    @pytest.fixture
+    def data_dir(self, tmp_path):
+        d = tmp_path / "data" / "users" / "test_user"
+        d.mkdir(parents=True)
+        return d
+
+    def test_successful_ingest_appends_jsonl_entry(self, data_dir, tmp_path, monkeypatch):
+        log_path = tmp_path / "data" / "admin" / "ingest_log.jsonl"
+        monkeypatch.setattr("mcp_server.tools._INGEST_LOG_PATH", str(log_path))
+
+        with patch("mcp_server.tools._data_dir", return_value=data_dir):
+            result = _ingest_health_snapshot(
+                user_id="test_user",
+                metrics={"resting_hr": 54.0, "steps": 8000, "hrv_sdnn": 42.0},
+                timestamp=_recent_ts(1),
+            )
+
+        assert result["ingested"] is True
+        assert log_path.exists(), f"Expected ingest log at {log_path}"
+        lines = log_path.read_text().strip().splitlines()
+        assert len(lines) == 1
+        entry = json.loads(lines[0])
+        assert entry["user_id"] == "test_user"
+        assert entry["metric_count"] == 3
+        assert sorted(entry["metric_keys"]) == ["hrv_sdnn", "resting_hr", "steps"]
+        assert "payload_timestamp" in entry  # from caller
+        assert "ts" in entry  # when log entry itself was written
+
+    def test_rejected_ingest_does_not_append_entry(self, data_dir, tmp_path, monkeypatch):
+        log_path = tmp_path / "data" / "admin" / "ingest_log.jsonl"
+        monkeypatch.setattr("mcp_server.tools._INGEST_LOG_PATH", str(log_path))
+
+        with patch("mcp_server.tools._data_dir", return_value=data_dir):
+            result = _ingest_health_snapshot(user_id="test_user", metrics={})
+
+        assert result["ingested"] is False
+        assert not log_path.exists()
+
+    def test_sparse_payload_is_logged_with_low_count(self, data_dir, tmp_path, monkeypatch):
+        """The whole point: sparse payloads like the 2026-03-25 incident
+        get captured in the log so analyze_ingest_log can find them later."""
+        log_path = tmp_path / "data" / "admin" / "ingest_log.jsonl"
+        monkeypatch.setattr("mcp_server.tools._INGEST_LOG_PATH", str(log_path))
+
+        with patch("mcp_server.tools._data_dir", return_value=data_dir):
+            result = _ingest_health_snapshot(
+                user_id="test_user",
+                metrics={"resting_hr": 54.0},
+                timestamp=_recent_ts(1),
+            )
+
+        assert result["ingested"] is True
+        lines = log_path.read_text().strip().splitlines()
+        assert len(lines) == 1
+        entry = json.loads(lines[0])
+        assert entry["metric_count"] == 1
+        assert entry["metric_keys"] == ["resting_hr"]
+
+    def test_appends_across_calls_not_overwrite(self, data_dir, tmp_path, monkeypatch):
+        log_path = tmp_path / "data" / "admin" / "ingest_log.jsonl"
+        monkeypatch.setattr("mcp_server.tools._INGEST_LOG_PATH", str(log_path))
+
+        with patch("mcp_server.tools._data_dir", return_value=data_dir):
+            _ingest_health_snapshot(
+                user_id="test_user",
+                metrics={"resting_hr": 55.0, "steps": 7000},
+                timestamp=_recent_ts(24),
+            )
+            _ingest_health_snapshot(
+                user_id="test_user",
+                metrics={"resting_hr": 53.0, "steps": 9000, "hrv_sdnn": 42.0},
+                timestamp=_recent_ts(1),
+            )
+
+        lines = log_path.read_text().strip().splitlines()
+        assert len(lines) == 2
+        assert json.loads(lines[0])["metric_count"] == 2
+        assert json.loads(lines[1])["metric_count"] == 3
+
+    def test_log_write_failure_does_not_break_ingest(self, data_dir, tmp_path, monkeypatch):
+        """If the log file can't be written, ingest still succeeds —
+        observability is best-effort, not load-bearing."""
+        bad_path = tmp_path / "nonexistent_parent_that_will_not_be_created" / "foo" / "bar.jsonl"
+        monkeypatch.setattr("mcp_server.tools._INGEST_LOG_PATH", str(bad_path))
+        # Also patch os.makedirs to raise, to simulate a real failure
+        import os as _os
+        real_makedirs = _os.makedirs
+
+        def _failing_makedirs(*args, **kwargs):
+            raise OSError("simulated disk failure")
+
+        monkeypatch.setattr("os.makedirs", _failing_makedirs)
+
+        with patch("mcp_server.tools._data_dir", return_value=data_dir):
+            result = _ingest_health_snapshot(
+                user_id="test_user",
+                metrics={"resting_hr": 54.0, "steps": 8000, "hrv_sdnn": 42.0},
+                timestamp=_recent_ts(1),
+            )
+
+        # Restore makedirs before pytest teardown needs it
+        monkeypatch.setattr("os.makedirs", real_makedirs)
+        assert result["ingested"] is True
