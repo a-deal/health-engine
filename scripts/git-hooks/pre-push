@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+#
+# pre-push: warn on commits missing Reviewed-by: trailer.
+#
+# Source: 2026-04-17 agent-review-discipline handoff in hub. During the
+# design-inspiration migration, three of four agent-authored commits reached
+# origin before either W or K reviewed them. HARD RULE #8 (Second-persona
+# review before push) only fired because Andrew manually invoked the gate
+# during close-out audit. This hook makes the gate self-firing. Landed in
+# hub first; added to dotfiles 2026-04-20 after the /review-before-push v2
+# reconciliation (skill now emits trailers, hook enforces them).
+#
+# Convention: every commit message ends with one of:
+#   Reviewed-by: W
+#   Reviewed-by: K
+#   Reviewed-by: W+K
+#   Reviewed-by: Duke
+#   Reviewed-by: Taleb
+#   Reviewed-by: none (doc-only)
+#   Reviewed-by: none (ACKNOWLEDGED SKIP: <reason>)
+#
+# Multi-reviewer combos are accepted (the hook only checks for the
+# ^Reviewed-by: prefix, not the value). Keep the convention tight to
+# preserve signal.
+#
+# Behavior:
+#   - Interactive terminal: prompts for confirmation on missing trailers.
+#   - Agent session (no /dev/tty): the read fails and the push is blocked.
+#     This is the intended fail-safe behavior for agent sessions.
+#
+# Install via: scripts/install-git-hooks.sh
+#
+# Bypass (use sparingly, document the reason):
+#   git push --no-verify    # violates "never skip hooks" HARD RULE; avoid
+
+set -uo pipefail
+
+ZERO="0000000000000000000000000000000000000000"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    if [ "$local_sha" = "$ZERO" ]; then
+        continue
+    fi
+
+    if [ "$remote_sha" = "$ZERO" ]; then
+        range=$(git rev-list "$local_sha" --not --remotes 2>/dev/null | head -50)
+    else
+        range=$(git rev-list "${remote_sha}..${local_sha}")
+    fi
+
+    if [ -z "$range" ]; then
+        continue
+    fi
+
+    missing=""
+    while IFS= read -r sha; do
+        [ -z "$sha" ] && continue
+        if ! git log -1 --format='%B' "$sha" | grep -qE '^Reviewed-by:'; then
+            line=$(git log -1 --format='%h %s' "$sha")
+            missing="${missing}  ${line}"$'\n'
+        fi
+    done <<< "$range"
+
+    if [ -n "$missing" ]; then
+        {
+            echo ""
+            echo "WARNING: the following commits lack a Reviewed-by: trailer:"
+            echo ""
+            printf "%s" "$missing"
+            echo ""
+            echo "Per HARD RULE #8 (Second-persona review before push), agent-authored"
+            echo "code needs a documented review. Acceptable trailers:"
+            echo "  Reviewed-by: W | K | W+K | Duke | Taleb"
+            echo "  Reviewed-by: none (doc-only)"
+            echo "  Reviewed-by: none (ACKNOWLEDGED SKIP: <reason>)"
+            echo ""
+            printf "Continue push anyway? [y/N] "
+        } >&2
+
+        if ! read -r answer < /dev/tty 2>/dev/null; then
+            {
+                echo ""
+                echo "pre-push: /dev/tty unavailable (likely agent session). Push blocked."
+                echo "Add the trailer via 'git commit --amend' or 'git rebase --exec', or use"
+                echo "'Reviewed-by: none (ACKNOWLEDGED SKIP: <reason>)' for explicit skip."
+                echo "Or run /review-before-push to stamp trailers via the skill."
+            } >&2
+            exit 1
+        fi
+
+        case "$answer" in
+            y|Y) ;;
+            *)
+                echo "pre-push: aborted." >&2
+                exit 1
+                ;;
+        esac
+    fi
+done
+
+exit 0
